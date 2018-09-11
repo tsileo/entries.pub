@@ -7,9 +7,9 @@ module Store = Irmin_unix.Git.FS.KV(Irmin.Contents.String)
 
 let slugify k =
   k
-  |> Str.global_replace (Str.regexp " ") "_"
+  |> Str.global_replace (Str.regexp " ") "-"
   |> String.lowercase_ascii
-  |> Str.global_replace (Str.regexp "[^a-z0-9_]") ""
+  |> Str.global_replace (Str.regexp "[^a-z0-9\\-]") ""
 
 let config = Irmin_git.config ~bare:false "./db"
 
@@ -47,6 +47,8 @@ let handle_form_create body =
     Server.json (invalid_request_error "missing content") ~status:400
   else if entry_name = "" then
     Server.json (invalid_request_error "missing name") ~status:400
+  else if entry_type <> "entry" then
+    Server.json (invalid_request_error "invalid type, only entry is supported") ~status:400
   else
     let obj = `O [
       "type", `A [ `String ("h-" ^ entry_type) ];
@@ -55,9 +57,11 @@ let handle_form_create body =
         "name", `A [ `String entry_name ]
       ]
     ] in
+    let slug = slugify entry_name in
+    let js = Ezjsonm.to_string obj in
     Store.Repo.v config >>=
     Store.master >>= fun t ->
-    Store.set t ~info:(info "Creating a new entry") ["entries"; slugify entry_name] Ezjsonm.(to_string obj) >>= fun () ->
+    Store.set t ~info:(info "Creating a new entry") ["entries"; slug] js >>= fun () ->
       Server.string "ok"
 
 
