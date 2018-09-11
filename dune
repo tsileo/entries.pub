@@ -1,0 +1,3 @@
+(executable
+ (name app)
+ (libraries yurt lwt.unix irmin-unix))
