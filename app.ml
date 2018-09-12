@@ -4,6 +4,26 @@ open Yurt
 include Cohttp_lwt_unix.Server
 
 module Store = Irmin_unix.Git.FS.KV(Irmin.Contents.String)
+(*module ODates = ODate.Make(ODate.MakeImplem(Unix))
+*)
+
+module Date = struct
+  module D = ODate.Unix
+  let format = "%FT%TZ"
+  (*let format = "%Y-%m-%dT%T%:::z"
+  *)
+  let parseR = match D.From.generate_parser format with
+    | Some p -> p
+    | None -> failwith "could not generate parser"
+  let printer = match D.To.generate_printer format with
+    | Some p -> p
+    | None -> failwith "could not generate printer"
+
+  type t = D.t
+  let now () = D.now ()
+  let to_string d = D.To.string ~tz:ODate.UTC printer d
+  let of_string s = D.From.string parseR s
+end
 
 let slugify k =
   k
@@ -39,30 +59,32 @@ let jform_field jdata k default =
 (* Create a new note via a POSTed form *)
 let handle_form_create body =
   Form.urlencoded_json body >>= fun p ->
-  let jdata = Ezjsonm.(value p) in
-  let entry_type = jform_field jdata "h" "entry" in
-  let entry_content = jform_field jdata "content" "" in
-  let entry_name = jform_field jdata "name" "" in
-  if entry_content = "" then
-    Server.json (invalid_request_error "missing content") ~status:400
-  else if entry_name = "" then
-    Server.json (invalid_request_error "missing name") ~status:400
-  else if entry_type <> "entry" then
-    Server.json (invalid_request_error "invalid type, only entry is supported") ~status:400
-  else
-    let obj = `O [
-      "type", `A [ `String ("h-" ^ entry_type) ];
-      "properties", `O [
-        "content", `A [ `String entry_content ];
-        "name", `A [ `String entry_name ]
-      ]
-    ] in
-    let slug = slugify entry_name in
-    let js = Ezjsonm.to_string obj in
-    Store.Repo.v config >>=
-    Store.master >>= fun t ->
-    Store.set t ~info:(info "Creating a new entry") ["entries"; slug] js >>= fun () ->
-      Server.string "ok"
+    let jdata = Ezjsonm.(value p) in
+    let entry_type = jform_field jdata "h" "entry" in
+    let entry_content = jform_field jdata "content" "" in
+    let entry_name = jform_field jdata "name" "" in
+    let entry_published = Date.now () |> Date.to_string in
+    if entry_content = "" then
+      Server.json (invalid_request_error "missing content") ~status:400
+    else if entry_name = "" then
+      Server.json (invalid_request_error "missing name") ~status:400
+    else if entry_type <> "entry" then
+      Server.json (invalid_request_error "invalid type, only entry is supported") ~status:400
+    else
+      let obj = `O [
+        "type", `A [ `String ("h-" ^ entry_type) ];
+        "properties", `O [
+          "content", `A [ `String entry_content ];
+          "name", `A [ `String entry_name ];
+          "published", `A [ `String entry_published ];
+        ]
+      ] in
+      let slug = slugify entry_name in
+      let js = Ezjsonm.to_string obj in
+      Store.Repo.v config >>=
+      Store.master >>= fun t ->
+        Store.set t ~info:(info "Creating a new entry") ["entries"; slug] js >>= fun () ->
+          Server.string "ok"
 
 
 let _ =

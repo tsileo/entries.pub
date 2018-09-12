@@ -1,3 +1,3 @@
 .PHONY: app
 app:
-	ocamlfind ocamlopt app.ml -o app -package irmin-unix,lwt.unix,yurt -linkpkg
+	dune build app.exe && cp -r _build/default/app.exe app
