@@ -1,3 +1,3 @@
 .PHONY: app
 app:
-	dune build app.exe && cp -r _build/default/app.exe app
+	dune build src/app.exe && cp -r _build/default/src/app.exe app

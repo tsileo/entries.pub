@@ -51,8 +51,13 @@ let load_file f =
   close_in ic;
   (s)
 
-let tpl = load_file "template.html"
-let atom_tpl = load_file "atom.xml"
+let html_tpl =
+  load_file "template.html"
+  |> Mustache.of_string
+
+let atom_tpl =
+  load_file "atom.xml"
+  |> Mustache.of_string
 
 (* TODO uses Ezjsonm.find instead *)
 let find l key =
@@ -62,7 +67,10 @@ let find l key =
 
 (* Micropub API error *)
 let invalid_request_error desc = 
-  `O [ "error",  `String "invalid_request"; "error_description", `String desc]
+  `O [
+    "error",  `String "invalid_request";
+    "error_description", `String desc;
+  ]
 
 (* Return the first item of the given list or a data *)
 let jform_field jdata k default =
@@ -94,6 +102,7 @@ let compare_entry_data a b =
   let b_published = jdata_field b ["published"] "" in
   (String.compare b_published a_published)
 
+(* Convert a JSON entry into template data *)
 let entry_tpl_data jdata =
   let name = jform_field jdata ["properties"; "name"] "" in
   let content = jform_field jdata ["properties"; "content"] "" in
@@ -110,10 +119,49 @@ let entry_tpl_data jdata =
     "url", `String (base_url ^ "/" ^ slug);
   ]
 
-(* Create a new note via a POSTed form *)
+let path_to_slug str =
+  if str = "" then "" else
+  String.sub str 1 ((String.length str) - 1)
+
+(* Micropub delete action handler *)
+let handle_delete url =
+  if url == "" then
+    Server.json (invalid_request_error "url") ~status:400
+  else
+  let slug = Uri.of_string url |> Uri.path |> path_to_slug in
+  Store.Repo.v config >>=
+  Store.master >>= fun t ->
+  Store.find t ["entries"; slug] >>= fun some_stored ->
+  match some_stored with
+  | Some stored ->
+    Store.remove t ~info:(info "Deleting an entry") ["entries"; slug] >>= fun () ->
+      Server.string "" ~status:204
+  | None -> Server.json (`O ["error", `String "url not found"]) ~status:404
+
+
+(* Micropub JSON handler *)
+let handle_json_create body =
+  Body.to_string body >>= fun sbody ->
+    let jdata = Ezjsonm.from_string sbody in
+    (* Handle actions *)
+    let action = jdata_field jdata ["action"] "" in
+    let url = jdata_field jdata ["url"] "" in
+    if action = "delete" then handle_delete url else
+    (* Continue to process the entry creation *)
+    let entry_type = jform_field jdata ["type"] "" in
+    (* TODO handle entry creation *)
+    Server.string entry_type
+
+
+(* Micropub form handler *)
 let handle_form_create body =
   Form.urlencoded_json body >>= fun p ->
     let jdata = Ezjsonm.(value p) in
+    (* Handle actions *)
+    let action = jform_field jdata ["action"] "" in
+    let url = jform_field jdata ["url"] "" in
+    if action = "delete" then handle_delete url else
+    (* Continue to process the entry creation *)
     let entry_type = jform_field jdata ["h"] "entry" in
     let entry_content = jform_field jdata ["content"] "" in
     let entry_name = jform_field jdata ["name"] "" in
@@ -150,6 +198,16 @@ let add_headers h =
    |> fun h -> Header.add h "Content-Type" "text/html; charset=utf-8"
    |> fun h -> Header.add h "X-Powered-By" "entries.pub"
 
+
+let is_multipart_regexp = Str.regexp "multipart/.*"
+let is_form content_type : bool =
+  let is_multipart = Str.string_match (is_multipart_regexp) content_type 0 in
+  if is_multipart || content_type = "application/x-www-form-urlencoded" then
+    true
+  else
+    false
+
+
 (* Create a server *)
 let _ =
 let open Server in
@@ -162,72 +220,84 @@ server "127.0.0.1" 7888
   Store.master >>= fun t ->
   Store.list t ["entries"] >>= fun keys ->
     Lwt_list.map_s (fun (s, c) ->
-      Store.get t ["entries";s] >>= fun stored ->
+      Store.get t ["entries"; s] >>= fun stored ->
         stored |> Ezjsonm.from_string |> entry_tpl_data |> Lwt.return
     ) keys >>= fun dat ->
-    let mtpl = Mustache.of_string atom_tpl in
-    (* TODO sort data by published *)
     let dat = `O [
       "name", `String "Name";
       "base_url", `String base_url;
       "updated", `String "2015-07-21T18:01:00+02:00";
       "entries", `A dat;
     ] in
-    let out = Mustache.render mtpl dat in
+    let out = Mustache.render atom_tpl dat in
     let headers = Header.init ()
-      |> fun h -> Header.add h "Content-Type" "application/xml" in
-    string out)
+      |> fun h -> Header.add h "Content-Type" "application/xml"
+      |> fun h -> Header.add h "Link" "</atom.xml>; rel=\"self\""
+      |> fun h -> Header.add h "Link" "<https://pubsubhubbub.superfeedr.com/>; rel=\"hub\"" in
+    string out ~headers)
 
 >| get "/" (fun req params body ->
   Store.Repo.v config >>=
   Store.master >>= fun t ->
   Store.list t ["entries"] >>= fun keys ->
     Lwt_list.map_s (fun (s, c) ->
-      Store.get t ["entries";s] >>= fun stored ->
+      Store.get t ["entries"; s] >>= fun stored ->
         stored |> Ezjsonm.from_string |> entry_tpl_data |> Lwt.return
     ) keys >>= fun dat ->
-    let mtpl = Mustache.of_string tpl in
     let dat = `O [
       "entries", `A (List.sort compare_entry_data dat);
       "base_url", `String base_url;
       "is_index", `Bool true;
       "is_entry", `Bool false;
+      "is_404", `Bool false;
     ] in
-    let out = Mustache.render mtpl dat in
+    let out = Mustache.render html_tpl dat in
     let headers = Header.init ()
       |> add_headers in
     string out ~headers)
+
 
 >| get "/<slug:string>" (fun req params body ->
   let slug = Route.string params "slug" in
    Store.Repo.v config >>=
    Store.master >>= fun t ->
-    Store.get t ["entries";slug] >>= fun stored ->
-        let nstored = stored |> Ezjsonm.from_string |> entry_tpl_data in
-        let mtpl = Mustache.of_string tpl in
-        let dat = `O [
-          "is_index", `Bool false;
-          "is_entry", `Bool true;
-          "base_url", `String base_url;
-          "entry", nstored;
-        ] in
-        let out = Mustache.render mtpl dat in
-        let headers = Header.init ()
-          |> add_headers in
-        string out ~headers)
+      Store.find t ["entries"; slug] >>= fun some_stored ->
+        match some_stored with
+        | Some stored ->
+          let nstored = stored |> Ezjsonm.from_string |> entry_tpl_data in
+          let dat = `O [
+            "is_index", `Bool false;
+            "is_entry", `Bool true;
+            "is_404", `Bool false;
+            "base_url", `String base_url;
+            "entry", nstored;
+          ] in
+          let out = Mustache.render html_tpl dat in
+          let headers = Header.init ()
+            |> add_headers in
+          (string out ~headers)
+        | None ->
+          let dat = `O [
+            "is_index", `Bool false;
+            "is_entry", `Bool false;
+            "is_404", `Bool true;
+            "base_url", `String base_url;
+          ] in
+          let out = Mustache.render html_tpl dat in
+          let headers = Header.init ()
+            |> add_headers in
+           string out ~headers ~status:404)
 
->| get "/lol" (fun req params body ->
-  let dat1 = Omd.of_string "**hey**" |> Omd.to_html  in
-  let mtpl = Mustache.of_string tpl in
-  let dat = `O ["name", `String "thomas";"hey", `String dat1] in
-  let out = Mustache.render mtpl dat in
-  let headers = Header.init ()
-    |> add_headers in
-  string out ~headers)
 
 >| post "/micropub" (fun req params body->
+    let content_type = Yurt_util.unwrap_option_default (Header.get req.Request.headers "Content-Type") "" in
+    if is_form content_type then
     (* TODO check auth and handle JSON *)
-    handle_form_create body)
+      handle_form_create body
+    else if content_type = "application/json" then
+      handle_json_create body
+    else
+      string "bad content-type" ~status:415)
 
 (* Run it *)
 |> run
