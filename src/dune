@@ -1,4 +1,4 @@
 (executable
  (name app)
  (flags (-w -3-6-27-32-33-35-50))
- (libraries yurt lwt.unix irmin-unix odate omd mustache yaml))
+ (libraries yurt lwt.unix irmin-unix odate omd mustache yaml lwt_ssl lambdasoup))

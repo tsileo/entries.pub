@@ -281,6 +281,7 @@ let add_headers h =
    |> fun h -> Header.add h "Content-Type" "text/html; charset=utf-8"
    |> fun h -> Header.add h "X-Powered-By" "entries.pub"
    |> fun h -> Header.add h "Link" ("<" ^ base_url ^ "/micropub>; rel=\"micropub\"")
+   |> fun h -> Header.add h "Link" ("<" ^ base_url ^ "/webmention>; rel=\"webmention\"")
 
 
 let is_multipart_regexp = Str.regexp "multipart/.*"
@@ -326,6 +327,7 @@ server "127.0.0.1" 7888
     string out ~headers)
 
 
+(* Index *)
 >| get "/" (fun req params body ->
   Store.Repo.v config >>=
   Store.master >>= fun t ->
@@ -347,8 +349,9 @@ server "127.0.0.1" 7888
     string out ~headers)
 
 
+(* Handle Micropub queries *)
 >| get "/micropub" (fun req params body ->
-  (* Handle queries *)
+  (* TODO check auth and handle JSON *)
   let q = Yurt_util.unwrap_option_default (Query.string req "q") "" in
   let url = Yurt_util.unwrap_option_default (Query.string req "url") "" in
   if q = "config" then Server.json (`O []) else
@@ -371,6 +374,13 @@ server "127.0.0.1" 7888
   json (`O []))
 
 
+(* Micropub endpoint *)
+>| post "/webmention" (fun req params body ->
+  Webmention.verify_webmention "https://a4.io" "https://google.com" >>= fun res ->
+  if res then string "yes" else string "no")
+
+
+(* Micropub endpoint *)
 >| post "/micropub" (fun req params body ->
     let content_type = Yurt_util.unwrap_option_default (Header.get req.Request.headers "Content-Type") "" in
     if content_type = "application/json" then
@@ -381,6 +391,7 @@ server "127.0.0.1" 7888
     (* string "bad content-type" ~status:415) *)
 
 
+(* Post/entry page *)
 >| get "/<slug:string>" (fun req params body ->
   let slug = Route.string params "slug" in
    Store.Repo.v config >>=
