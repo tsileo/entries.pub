@@ -280,8 +280,7 @@ let add_headers h =
    h
    |> fun h -> Header.add h "Content-Type" "text/html; charset=utf-8"
    |> fun h -> Header.add h "X-Powered-By" "entries.pub"
-   |> fun h -> Header.add h "Link" ("<" ^ base_url ^ "/micropub>; rel=\"micropub\"")
-   |> fun h -> Header.add h "Link" ("<" ^ base_url ^ "/webmention>; rel=\"webmention\"")
+   |> fun h -> Header.add h "Link" ("<" ^ base_url ^ "/micropub>; rel=\"micropub\",<" ^ base_url ^ "/webmention>; rel=\"webmention\"")
 
 
 let is_multipart_regexp = Str.regexp "multipart/.*"
@@ -292,13 +291,14 @@ let is_form content_type : bool =
   else
     false
 
+let head (r : string) (ep : Yurt.endpoint) (s : Server.server) =
+  Server.register_route_string s "HEAD" r ep
+
 
 (* Create a server *)
 let _ =
 let open Server in
-
 server "127.0.0.1" 7888
-
 
 (* Atom feed *)
 >| get "/atom.xml" (fun req params body ->
@@ -326,7 +326,6 @@ server "127.0.0.1" 7888
       |> fun h -> Header.add h "Link" "<https://pubsubhubbub.superfeedr.com/>; rel=\"hub\"" in
     string out ~headers)
 
-
 (* Index *)
 >| get "/" (fun req params body ->
   Store.Repo.v config >>=
@@ -348,6 +347,10 @@ server "127.0.0.1" 7888
       |> add_headers in
     string out ~headers)
 
+(* Micropub endpoint *)
+>| post "/webmention" (fun req params body ->
+  Webmention.verify_webmention "https://a4.io" "https://google.com" >>= fun res ->
+  if res then string "yes" else string "no")
 
 (* Handle Micropub queries *)
 >| get "/micropub" (fun req params body ->
@@ -373,13 +376,6 @@ server "127.0.0.1" 7888
   end else
   json (`O []))
 
-
-(* Micropub endpoint *)
->| post "/webmention" (fun req params body ->
-  Webmention.verify_webmention "https://a4.io" "https://google.com" >>= fun res ->
-  if res then string "yes" else string "no")
-
-
 (* Micropub endpoint *)
 >| post "/micropub" (fun req params body ->
     let content_type = Yurt_util.unwrap_option_default (Header.get req.Request.headers "Content-Type") "" in
@@ -390,38 +386,62 @@ server "127.0.0.1" 7888
       handle_form_create body)
     (* string "bad content-type" ~status:415) *)
 
-
+(* HEAD index *)
+>| head "/" (fun req params body ->
+  let headers = Header.init ()
+   |> add_headers in
+   string "" ~headers)
+ 
+(* HEAD Post/entry page *)
+>| head "/<slug:string>" (fun req params body ->
+  let slug = Route.string params "slug" in
+   Store.Repo.v config >>=
+   Store.master >>= fun t ->
+     Store.find t ["entries"; slug] >>= fun some_stored ->
+       match some_stored with
+       | Some stored ->
+		let headers = Header.init ()
+         |> add_headers in
+         string "" ~headers
+       | None ->
+        (* 404 *)
+		let headers = Header.init ()
+         |> add_headers in
+         string "" ~headers ~status:404)
+ 
 (* Post/entry page *)
 >| get "/<slug:string>" (fun req params body ->
   let slug = Route.string params "slug" in
    Store.Repo.v config >>=
    Store.master >>= fun t ->
-      Store.find t ["entries"; slug] >>= fun some_stored ->
-        match some_stored with
-        | Some stored ->
-          let nstored = stored |> Ezjsonm.from_string |> entry_tpl_data in
-          let dat = `O [
-            "is_index", `Bool false;
-            "is_entry", `Bool true;
-            "is_404", `Bool false;
-            "base_url", `String base_url;
-            "entry", nstored;
-          ] in
-          let out = Mustache.render html_tpl dat in
-          let headers = Header.init ()
-            |> add_headers in
-          (string out ~headers)
-        | None ->
-          let dat = `O [
-            "is_index", `Bool false;
-            "is_entry", `Bool false;
-            "is_404", `Bool true;
-            "base_url", `String base_url;
-          ] in
-          let out = Mustache.render html_tpl dat in
-          let headers = Header.init ()
-            |> add_headers in
-           string out ~headers ~status:404)
+     Store.find t ["entries"; slug] >>= fun some_stored ->
+       match some_stored with
+       | Some stored ->
+         (* Render the entry *)
+         let nstored = stored |> Ezjsonm.from_string |> entry_tpl_data in
+         let dat = `O [
+           "is_index", `Bool false;
+           "is_entry", `Bool true;
+           "is_404", `Bool false;
+           "base_url", `String base_url;
+           "entry", nstored;
+         ] in
+         let out = Mustache.render html_tpl dat in
+         let headers = Header.init ()
+           |> add_headers in
+         (string out ~headers)
+       | None ->
+         (* Return a 404 *)
+         let dat = `O [
+           "is_index", `Bool false;
+           "is_entry", `Bool false;
+           "is_404", `Bool true;
+           "base_url", `String base_url;
+         ] in
+         let out = Mustache.render html_tpl dat in
+         let headers = Header.init ()
+         |> add_headers in
+         string out ~headers ~status:404)
 
 (* Run it *)
 |> run
