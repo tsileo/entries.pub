@@ -94,6 +94,7 @@ let rconf = match (load_file "config.yaml" |> Yaml.of_string) with
   | Error e -> failwith "failed to load config"
 
 let base_url = jdata_field rconf ["base_url"] "http://localhost:7888"
+let blog_name = jdata_field rconf ["blog_name"] "Untitled"
 let author_name = jdata_field rconf ["author_name"] "Dev"
 let author_email = jdata_field rconf ["author_email"] "dev@entries.pub"
 
@@ -178,14 +179,13 @@ let micropub_update_add current_data jdata =
     if not Ezjsonm.(mem current_data ["properties"; k]) then
       acc @ [k, v]
     else
-    (* TODO a mem and empty list *)
     let current = Ezjsonm.(get_strings (find current_data ["properties"; k])) in
     let new_v =
       current @ Ezjsonm.(get_strings v)
       |> List.map (fun x -> `String x)
      in
      let nl = List.remove_assoc k acc in
-     nl @ [k, `A new_v]  (* FIXME append values *)
+     nl @ [k, `A new_v]
   ) props added in
   Ezjsonm.(get_dict current_data)
   |> List.remove_assoc "properties"
@@ -273,8 +273,7 @@ let handle_form_create body =
       Store.master >>= fun t ->
         Store.set t ~info:(info "Creating a new entry") ["entries"; slug] js >>= fun () ->
           let headers = Header.init ()
-          (* TODO fix the Location URL *)
-           |> fun h -> Header.add h "Location" "http://entries.pub/" in
+           |> fun h -> Header.add h "Location" (base_url ^ "/" ^ slug) in
           Server.string "" ~status:201 ~headers
 
 let add_headers h =
@@ -308,13 +307,16 @@ server "127.0.0.1" 7888
     Lwt_list.map_s (fun (s, c) ->
       Store.get t ["entries"; s] >>= fun stored ->
         stored |> Ezjsonm.from_string |> entry_tpl_data |> Lwt.return
-    ) keys >>= fun dat ->
+    ) keys >>= fun entries ->
+    let updated = if List.length entries > 0 then
+        let last_one = List.hd entries in
+        Ezjsonm.(get_string (find last_one ["published"]))
+    else "" in
     let dat = `O [
-      "name", `String "Name";
+      "name", `String blog_name;
       "base_url", `String base_url;
-      (* TODO List.tl *)
-      "updated", `String "2015-07-21T18:01:00+02:00";
-      "entries", `A dat;
+      "updated", `String updated;
+      "entries", `A entries;
     ] in
     let out = Mustache.render atom_tpl dat in
     let headers = Header.init ()
