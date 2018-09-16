@@ -138,6 +138,39 @@ let handle_delete url =
       Server.string "" ~status:204
   | None -> Server.json (`O ["error", `String "url not found"]) ~status:404
 
+let handle_update url jdata =
+  if url == "" then
+    Server.json (invalid_request_error "url") ~status:400
+  else
+  let replace = if Ezjsonm.(mem jdata ["replace"]) then Ezjsonm.(find jdata ["replace"]) else `O [] in
+  let slug = Uri.of_string url |> Uri.path |> path_to_slug in
+  Store.Repo.v config >>=
+  Store.master >>= fun t ->
+  Store.find t ["entries"; slug] >>= fun some_stored ->
+  match some_stored with
+  | Some stored ->
+    let updated = (try Ezjsonm.(get_strings (find (from_string stored) ["delete"]))
+    with Ezjsonm.Parse_error (e1, e2) ->
+      (* We dont support multiple values so we can just delete the field *)
+      Ezjsonm.(get_dict (find (from_string stored) ["delete"]))
+      |> List.map (fun (k, v) -> k)
+    ) in
+    let props = Ezjsonm.(get_dict (find (from_string stored) ["properties"])) in
+    let new_props = List.fold_left (fun acc x ->
+      List.remove_assoc x acc
+    ) props updated in
+    Server.json (`O new_props)
+      (*
+    Server.json (`A (List.map (fun item -> `String item) updated))
+      let updated = List.fold_left (func acc x -> ) 
+      ["properties"; 
+          let new_dat = Ezjsonm.update Ezjsonm.(from_string stored) ["properties"; "content2"] (Some (`A [`String "loool"])) in
+          Server.string (Ezjsonm.to_string (Ezjsonm.wrap new_dat))
+    with Ezjsonm.Parse_error
+
+      *)
+  | None -> Server.json (`O ["error", `String "url not found"]) ~status:404
+ 
 
 (* Micropub JSON handler *)
 let handle_json_create body =
@@ -147,6 +180,7 @@ let handle_json_create body =
     let action = jdata_field jdata ["action"] "" in
     let url = jdata_field jdata ["url"] "" in
     if action = "delete" then handle_delete url else
+    if action = "update" then handle_update url jdata else
     (* Continue to process the entry creation *)
     let entry_type = jform_field jdata ["type"] "" in
     (* TODO handle entry creation *)
@@ -197,6 +231,7 @@ let add_headers h =
    h
    |> fun h -> Header.add h "Content-Type" "text/html; charset=utf-8"
    |> fun h -> Header.add h "X-Powered-By" "entries.pub"
+   |> fun h -> Header.add h "Link" ("<" ^ base_url ^ "/micropub>; rel=\"micropub\"")
 
 
 let is_multipart_regexp = Str.regexp "multipart/.*"
