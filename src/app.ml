@@ -124,7 +124,7 @@ let path_to_slug str =
   String.sub str 1 ((String.length str) - 1)
 
 (* Micropub delete action handler *)
-let handle_delete url =
+let micropub_delete url =
   if url == "" then
     Server.json (invalid_request_error "url") ~status:400
   else
@@ -138,39 +138,89 @@ let handle_delete url =
       Server.string "" ~status:204
   | None -> Server.json (`O ["error", `String "url not found"]) ~status:404
 
-let handle_update url jdata =
-  if url == "" then
-    Server.json (invalid_request_error "url") ~status:400
-  else
-  let replace = if Ezjsonm.(mem jdata ["replace"]) then Ezjsonm.(find jdata ["replace"]) else `O [] in
+
+let micropub_update_delete current_data jdata =
+  if not Ezjsonm.(mem jdata ["delete"]) then Ezjsonm.(get_dict current_data) else
+  let props = Ezjsonm.(get_dict (find current_data ["properties"])) in
+  let deleted = Ezjsonm.(find jdata ["delete"]) in
+  let new_props = match deleted with
+  | `O d ->
+    List.fold_left (fun acc x ->
+      let (k, v) = x in
+      let current = Ezjsonm.(get_strings (find current_data ["properties"; k])) in
+      let to_delete = Ezjsonm.(get_strings v) in
+      let new_data =
+        current
+        |> List.filter (fun x -> not (List.mem x to_delete))
+        |> List.map (fun x -> `String x)
+      in
+      let nl = List.remove_assoc k acc in
+      if List.length new_data > 0 then
+        nl @ [k, (`A new_data)]
+      else
+        nl
+    ) props d
+  | `A ks ->
+    List.fold_left (fun acc x ->
+      List.remove_assoc x acc
+    ) props Ezjsonm.(get_strings deleted)
+  | _ -> failwith "lol" in
+  Ezjsonm.(get_dict current_data)
+  |> List.remove_assoc "properties"
+  |> List.append ["properties", `O new_props]
+
+
+let micropub_update_add current_data jdata =
+  if not Ezjsonm.(mem jdata ["add"]) then Ezjsonm.(get_dict current_data) else
+  let props = Ezjsonm.(get_dict (find current_data ["properties"])) in
+  let added = Ezjsonm.(get_dict (find jdata ["add"])) in
+  let new_props = List.fold_left (fun acc (k, v) ->
+    if not Ezjsonm.(mem current_data ["properties"; k]) then
+      acc @ [k, v]
+    else
+    (* TODO a mem and empty list *)
+    let current = Ezjsonm.(get_strings (find current_data ["properties"; k])) in
+    let new_v =
+      current @ Ezjsonm.(get_strings v)
+      |> List.map (fun x -> `String x)
+     in
+     let nl = List.remove_assoc k acc in
+     nl @ [k, `A new_v]  (* FIXME append values *)
+  ) props added in
+  Ezjsonm.(get_dict current_data)
+  |> List.remove_assoc "properties"
+  |> List.append ["properties", `O new_props]
+
+
+let micropub_update_replace current_data jdata =
+  if not Ezjsonm.(mem jdata ["replace"]) then Ezjsonm.(get_dict current_data) else
+  let props = Ezjsonm.(get_dict (find current_data ["properties"])) in
+  let replaced = Ezjsonm.(get_dict (find jdata ["replace"])) in
+  let new_props = List.fold_left (fun acc (k, v) ->
+    let nl = List.remove_assoc k acc in
+    nl @ [k, v]
+  ) props replaced in
+  Ezjsonm.(get_dict current_data)
+  |> List.remove_assoc "properties"
+  |> List.append ["properties", `O new_props]
+
+
+let micropub_update url jdata =
+  if url = "" then Server.json (invalid_request_error "url") ~status:400 else
   let slug = Uri.of_string url |> Uri.path |> path_to_slug in
   Store.Repo.v config >>=
   Store.master >>= fun t ->
   Store.find t ["entries"; slug] >>= fun some_stored ->
   match some_stored with
   | Some stored ->
-    let updated = (try Ezjsonm.(get_strings (find (from_string stored) ["delete"]))
-    with Ezjsonm.Parse_error (e1, e2) ->
-      (* We dont support multiple values so we can just delete the field *)
-      Ezjsonm.(get_dict (find (from_string stored) ["delete"]))
-      |> List.map (fun (k, v) -> k)
-    ) in
-    let props = Ezjsonm.(get_dict (find (from_string stored) ["properties"])) in
-    let new_props = List.fold_left (fun acc x ->
-      List.remove_assoc x acc
-    ) props updated in
-    Server.json (`O new_props)
-      (*
-    Server.json (`A (List.map (fun item -> `String item) updated))
-      let updated = List.fold_left (func acc x -> ) 
-      ["properties"; 
-          let new_dat = Ezjsonm.update Ezjsonm.(from_string stored) ["properties"; "content2"] (Some (`A [`String "loool"])) in
-          Server.string (Ezjsonm.to_string (Ezjsonm.wrap new_dat))
-    with Ezjsonm.Parse_error
-
-      *)
+    let current_data = Ezjsonm.(from_string stored) in
+    let doc_with_replace = micropub_update_replace current_data jdata in
+    let doc_with_delete = micropub_update_delete (`O doc_with_replace) jdata in
+    let last_doc = micropub_update_add (`O doc_with_delete) jdata in
+    (* TODO handle the update *)
+    Server.json (`O last_doc)
   | None -> Server.json (`O ["error", `String "url not found"]) ~status:404
- 
+
 
 (* Micropub JSON handler *)
 let handle_json_create body =
@@ -179,8 +229,8 @@ let handle_json_create body =
     (* Handle actions *)
     let action = jdata_field jdata ["action"] "" in
     let url = jdata_field jdata ["url"] "" in
-    if action = "delete" then handle_delete url else
-    if action = "update" then handle_update url jdata else
+    if action = "delete" then micropub_delete url else
+    if action = "update" then micropub_update url jdata else
     (* Continue to process the entry creation *)
     let entry_type = jform_field jdata ["type"] "" in
     (* TODO handle entry creation *)
@@ -194,7 +244,7 @@ let handle_form_create body =
     (* Handle actions *)
     let action = jform_field jdata ["action"] "" in
     let url = jform_field jdata ["url"] "" in
-    if action = "delete" then handle_delete url else
+    if action = "delete" then micropub_delete url else
     (* Continue to process the entry creation *)
     let entry_type = jform_field jdata ["h"] "entry" in
     let entry_content = jform_field jdata ["content"] "" in
@@ -249,6 +299,7 @@ let open Server in
 
 server "127.0.0.1" 7888
 
+
 (* Atom feed *)
 >| get "/atom.xml" (fun req params body ->
   Store.Repo.v config >>=
@@ -261,6 +312,7 @@ server "127.0.0.1" 7888
     let dat = `O [
       "name", `String "Name";
       "base_url", `String base_url;
+      (* TODO List.tl *)
       "updated", `String "2015-07-21T18:01:00+02:00";
       "entries", `A dat;
     ] in
@@ -270,6 +322,7 @@ server "127.0.0.1" 7888
       |> fun h -> Header.add h "Link" "</atom.xml>; rel=\"self\""
       |> fun h -> Header.add h "Link" "<https://pubsubhubbub.superfeedr.com/>; rel=\"hub\"" in
     string out ~headers)
+
 
 >| get "/" (fun req params body ->
   Store.Repo.v config >>=
@@ -290,6 +343,40 @@ server "127.0.0.1" 7888
     let headers = Header.init ()
       |> add_headers in
     string out ~headers)
+
+
+>| get "/micropub" (fun req params body ->
+  (* Handle queries *)
+  let q = Yurt_util.unwrap_option_default (Query.string req "q") "" in
+  let url = Yurt_util.unwrap_option_default (Query.string req "url") "" in
+  if q = "config" then Server.json (`O []) else
+  if q = "syndicate-to" then Server.json (`O ["syndicate-to", `A []]) else
+  if q = "source" then begin
+  if url = "" then
+    (json (invalid_request_error "url") ~status:400)
+  else
+  let slug = Uri.of_string url |> Uri.path |> path_to_slug in
+  Store.Repo.v config >>=
+  Store.master >>= fun t ->
+  Store.find t ["entries"; slug] >>= fun some_stored ->
+    match some_stored with
+    | Some stored ->
+      let current_data = Ezjsonm.(from_string stored) in
+      json current_data
+    | None ->
+      json (`O ["error", `String "url not found"]) ~status:404
+  end else
+  json (`O []))
+
+
+>| post "/micropub" (fun req params body ->
+    let content_type = Yurt_util.unwrap_option_default (Header.get req.Request.headers "Content-Type") "" in
+    if content_type = "application/json" then
+    (* TODO check auth and handle JSON *)
+      handle_json_create body
+    else
+      handle_form_create body)
+    (* string "bad content-type" ~status:415) *)
 
 
 >| get "/<slug:string>" (fun req params body ->
@@ -322,17 +409,6 @@ server "127.0.0.1" 7888
           let headers = Header.init ()
             |> add_headers in
            string out ~headers ~status:404)
-
-
->| post "/micropub" (fun req params body->
-    let content_type = Yurt_util.unwrap_option_default (Header.get req.Request.headers "Content-Type") "" in
-    if is_form content_type then
-    (* TODO check auth and handle JSON *)
-      handle_form_create body
-    else if content_type = "application/json" then
-      handle_json_create body
-    else
-      string "bad content-type" ~status:415)
 
 (* Run it *)
 |> run
