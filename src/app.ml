@@ -349,8 +349,12 @@ server "127.0.0.1" 7888
 
 (* Micropub endpoint *)
 >| post "/webmention" (fun req params body ->
-  Webmention.verify_webmention "https://a4.io" "https://google.com" >>= fun res ->
+  Webmention.verify_incoming_webmention "https://a4.io" "https://google.com" >>= fun res ->
   if res then string "yes" else string "no")
+  (*
+  Websub.ping "https://google.com" >>= fun res ->
+  if res then string "yes" else string "no")
+  *)
 
 (* Handle Micropub queries *)
 >| get "/micropub" (fun req params body ->
