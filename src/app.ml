@@ -3,126 +3,8 @@ open Lwt
 open Yurt
 include Cohttp_lwt_unix.Server
 
-module Store = Irmin_unix.Git.FS.KV(Irmin.Contents.String)
-
-module Date = struct
-  module D = ODate.Unix
-  (* iso format *)
-  let format = "%FT%TZ"
-  let parseR = match D.From.generate_parser format with
-    | Some p -> p
-    | None -> failwith "could not generate parser"
-  let printer = match D.To.generate_printer format with
-    | Some p -> p
-    | None -> failwith "could not generate printer"
-  let pformat = "%b %d, %Y"
-  let pprinter = match D.To.generate_printer pformat with
-    | Some p -> p
-    | None -> failwith "could not generate pprinter"
-
-
-  type t = D.t
-  let now () = D.now ()
-  let to_string d = D.To.string ~tz:ODate.UTC printer d
-  let to_pretty d = D.To.string ~tz:ODate.UTC pprinter d
-  let of_string s = D.From.string parseR s
-end
-
-(* Slugify replaces whitespaces by dashes, lowecases and remove any non alphanum chars. *)
-let slugify k =
-  k
-  |> Str.global_replace (Str.regexp " ") "-"
-  |> String.lowercase_ascii
-  |> Str.global_replace (Str.regexp "[^a-z0-9\\-]") ""
-
-(* Irmin config *)
-let config = Irmin_git.config ~bare:false "./db"
-
-let author = "entries.pub <dev@entries.pub>"
- 
-let info fmt = Irmin_unix.info ~author fmt
-
-(* Read the file as a string *)
-let load_file f =
-  let ic = open_in f in
-  let n = in_channel_length ic in
-  let s = String.create n in
-  really_input ic s 0 n;
-  close_in ic;
-  (s)
-
-let html_tpl =
-  load_file "template.html"
-  |> Mustache.of_string
-
-let atom_tpl =
-  load_file "atom.xml"
-  |> Mustache.of_string
-
-(* TODO uses Ezjsonm.find instead *)
-let find l key =
-  match l with
-  | `O list -> List.assoc key list
-  | _ -> assert false
-
-(* Micropub API error *)
-let invalid_request_error desc = 
-  `O [
-    "error",  `String "invalid_request";
-    "error_description", `String desc;
-  ]
-
-(* Return the first item of the given list or a data *)
-let jform_field jdata k default =
-  if Ezjsonm.(mem jdata k) then
-    let items = Ezjsonm.(get_strings (find jdata k)) in
-      match items with
-        | [] -> default
-        | t :: _ -> t
-  else
-    default
-
-(* Return the first item of the given list or a data *)
-let jdata_field jdata k default =
-  if Ezjsonm.(mem jdata k) then
-    Ezjsonm.(get_string (find jdata k))
-  else
-    default
-
-let rconf = match (load_file "config.yaml" |> Yaml.of_string) with
-  | Ok r -> r
-  | Error e -> failwith "failed to load config"
-
-let base_url = jdata_field rconf ["base_url"] "http://localhost:7888"
-let blog_name = jdata_field rconf ["blog_name"] "Untitled"
-let author_name = jdata_field rconf ["author_name"] "Dev"
-let author_email = jdata_field rconf ["author_email"] "dev@entries.pub"
-
-let compare_entry_data a b =
-  let a_published = jdata_field a ["published"] "" in
-  let b_published = jdata_field b ["published"] "" in
-  (String.compare b_published a_published)
-
-(* Convert a JSON entry into template data *)
-let entry_tpl_data jdata =
-  let name = jform_field jdata ["properties"; "name"] "" in
-  let content = jform_field jdata ["properties"; "content"] "" in
-  let published = jform_field jdata ["properties"; "published"] "" in
-  let slug = slugify name in
-  `O [
-    "name", `String name;
-    "slug", `String slug;
-    "content", `String (Omd.of_string content |> Omd.to_html);
-    "published", `String published;
-    "published_pretty", `String (Date.of_string published |> Date.to_pretty);
-    "author_name", `String author_name;
-    "author_email", `String author_email;
-    "url", `String (base_url ^ "/" ^ slug);
-  ]
-
-let path_to_slug str =
-  if str = "" then "" else
-  String.sub str 1 ((String.length str) - 1)
+open Config
+open Entry
 
 (* Micropub delete action handler *)
 let micropub_delete url =
@@ -217,8 +99,14 @@ let micropub_update url jdata =
     let doc_with_replace = micropub_update_replace current_data jdata in
     let doc_with_delete = micropub_update_delete (`O doc_with_replace) jdata in
     let last_doc = micropub_update_add (`O doc_with_delete) jdata in
-    (* TODO handle the update *)
-    Server.json (`O last_doc)
+    let slug = slugify (jform_field (`O last_doc) ["properties"; "name"] "") in
+    if slug = "" then failwith "no slug" else
+    let js = Ezjsonm.(to_string (`O last_doc)) in
+    Store.set t ~info:(info "Updating an entry") ["entries"; slug] js >>= fun () ->
+      let headers = Header.init ()
+      |> fun h -> Header.add h "Location" (base_url ^ "/" ^ slug)
+      in
+      Server.json ~status:201 ~headers (`O last_doc)
   | None -> Server.json (`O ["error", `String "url not found"]) ~status:404
 
 
@@ -276,12 +164,6 @@ let handle_form_create body =
            |> fun h -> Header.add h "Location" (base_url ^ "/" ^ slug) in
           Server.string "" ~status:201 ~headers
 
-let add_headers h =
-   h
-   |> fun h -> Header.add h "Content-Type" "text/html; charset=utf-8"
-   |> fun h -> Header.add h "X-Powered-By" "entries.pub"
-   |> fun h -> Header.add h "Link" ("<" ^ base_url ^ "/micropub>; rel=\"micropub\",<" ^ base_url ^ "/webmention>; rel=\"webmention\"")
-
 
 let is_multipart_regexp = Str.regexp "multipart/.*"
 let is_form content_type : bool =
@@ -314,6 +196,7 @@ server "127.0.0.1" 7888
         Ezjsonm.(get_string (find last_one ["published"]))
     else "" in
     let dat = `O [
+      "websub_endpoint", `String websub_endpoint;
       "name", `String blog_name;
       "base_url", `String base_url;
       "updated", `String updated;
@@ -323,7 +206,7 @@ server "127.0.0.1" 7888
     let headers = Header.init ()
       |> fun h -> Header.add h "Content-Type" "application/xml"
       |> fun h -> Header.add h "Link" "</atom.xml>; rel=\"self\""
-      |> fun h -> Header.add h "Link" "<https://pubsubhubbub.superfeedr.com/>; rel=\"hub\"" in
+      |> fun h -> Header.add h "Link" ("<" ^ websub_endpoint ^ ">; rel=\"hub\"") in
     string out ~headers)
 
 (* Index *)
@@ -383,13 +266,12 @@ server "127.0.0.1" 7888
 
 (* Micropub endpoint *)
 >| post "/micropub" (fun req params body ->
+    (* TODO check auth and handle JSON *)
     let content_type = Yurt_util.unwrap_option_default (Header.get req.Request.headers "Content-Type") "" in
     if content_type = "application/json" then
-    (* TODO check auth and handle JSON *)
       handle_json_create body
     else
       handle_form_create body)
-    (* string "bad content-type" ~status:415) *)
 
 (* HEAD index *)
 >| head "/" (fun req params body ->
