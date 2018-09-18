@@ -84,27 +84,7 @@ server "127.0.0.1" 7888
 
 (* Handle Micropub queries *)
 >| get "/micropub" (fun req params body ->
-  (* TODO check auth and handle JSON *)
-  let q = Yurt_util.unwrap_option_default (Query.string req "q") "" in
-  let url = Yurt_util.unwrap_option_default (Query.string req "url") "" in
-  if q = "config" then Server.json (`O []) else
-  if q = "syndicate-to" then Server.json (`O ["syndicate-to", `A []]) else
-  if q = "source" then begin
-  if url = "" then
-    (json (invalid_request_error "url") ~status:400)
-  else
-  let slug = Uri.of_string url |> Uri.path |> path_to_slug in
-  Store.Repo.v config >>=
-  Store.master >>= fun t ->
-  Store.find t ["entries"; slug] >>= fun some_stored ->
-    match some_stored with
-    | Some stored ->
-      let current_data = Ezjsonm.(from_string stored) in
-      json current_data
-    | None ->
-      json (`O ["error", `String "url not found"]) ~status:404
-  end else
-  json (`O []))
+ micropub_query req)
 
 (* Micropub endpoint *)
 >| post "/micropub" (fun req params body ->

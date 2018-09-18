@@ -5,6 +5,23 @@ include Cohttp.Link
 open Cohttp
 include Soup
 
+ let get_hcard soup =
+  let hcard_soup = try
+    soup $ ".h-card"
+  with _ -> `O []
+  in
+  let photo = try
+    hcard_soup $ ".u-photo" |> (fun node ->
+      let name = node |> name in
+      if name = "data" then
+        node |> R.attribute "value"
+      else
+        node |> R.attribute "src"
+    )
+  with _ -> ""
+  in
+  `O ["photo", `String photo]
+
 (* Returns true if URL contains a link to target *)
 let verify_incoming_webmention url target =
   Client.get url >>= fun (resp, body) ->
@@ -35,11 +52,11 @@ let discover_webmention_header resp =
 (* Returns the Webmention endpoint for a given URL if any *)
 let discover_webmention url =
   Client.get url >>= fun (resp, body) ->
-    (* Look for the webmention endpoint in the Link headers *)
-    let via_header = discover_webmention_header resp in
-    match via_header with
-    | Some u -> Some u |> Lwt.return
-    | None ->
-      (* Look for the webmention endpoint in the <link> tag *)
-      let soup = body |> Soup.parse in
-      discover_webmention_html soup
+  (* Look for the webmention endpoint in the Link headers *)
+  let via_header = discover_webmention_header resp in
+  match via_header with
+  | Some u -> Some u |> Lwt.return
+  | None ->
+    (* Look for the webmention endpoint in the <link> tag *)
+    let soup = body |> Soup.parse in
+    discover_webmention_html soup
