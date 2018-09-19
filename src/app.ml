@@ -6,6 +6,7 @@ include Cohttp_lwt_unix.Server
 open Config
 open Entry
 open Micropub
+open Microformats
 
 let is_multipart_regexp = Str.regexp "multipart/.*"
 let is_form content_type : bool =
@@ -74,10 +75,12 @@ server "127.0.0.1" 7888
 
 (* Micropub endpoint *)
 >| post "/webmention" (fun req params body ->
+  Microformats.test_mf2 >>= fun out ->
+  json out)
+  (*
   Webmention.discover_webmention "http://google.com" >>= fun res ->
   let v = Yurt_util.unwrap_option_default res "" in
   string v)
-  (*
   Websub.ping "https://google.com" >>= fun res ->
   if res then string "yes" else string "no")
   *)
