@@ -1,5 +1,7 @@
 # entries.pub
 
+[![Build Status](https://d.a4.io/api/badges/tsileo/entries.pub/status.svg)](https://d.a4.io/tsileo/entries.pub)
+
 WIP IndieWeb blog engine
 
 ## Features
