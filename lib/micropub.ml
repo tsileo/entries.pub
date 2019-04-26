@@ -133,6 +133,32 @@ let micropub_update url jdata =
       Server.json ~status:201 ~headers (`O last_doc)
   | None -> Server.json (`O ["error", `String "url not found"]) ~status:404
 
+(* Generate a random ID (hex-encoded) *)
+let new_id () =
+    let fd = Unix.openfile "/dev/urandom" [Unix.O_RDONLY] 0o400 in
+    let len = 8 in
+    let buff = Bytes.create len in
+    Unix.read fd buff 0 len;
+    Unix.close fd;
+    Hex.of_string (Bytes.unsafe_to_string buff)
+    |> Hex.show
+
+
+let save uid slug entry_type entry_content entry_name entry_published =
+      let obj = `O [
+        "type", `A [ `String ("h-" ^ entry_type) ];
+        "properties", `O [
+          "content", `A [ `String entry_content ];
+          "name", `A [ `String entry_name ];
+          "published", `A [ `String entry_published ];
+          "uid", `A [ `String uid ];
+        ]
+      ] in
+      let js = Ezjsonm.to_string obj in
+      Store.Repo.v config >>=
+      Store.master >>= fun t ->
+        Store.set t ~info:(info "Creating a new entry") ["entries"; uid] js
+
 
 (* Micropub JSON handler *)
 let handle_json_create body =
@@ -145,8 +171,18 @@ let handle_json_create body =
     if action = "update" then micropub_update url jdata else
     (* Continue to process the entry creation *)
     let entry_type = jform_field jdata ["type"] "" in
-    (* TODO handle entry creation *)
-    Server.string entry_type
+    let entry_content = jform_field jdata ["properties"; "content"] "" in
+    let entry_name = jform_field jdata ["properties"; "name"] "Untitled" in
+    let entry_published = jform_field jdata ["properties"; "published"] (Date.now () |> Date.to_string) in
+    if entry_type <> "h-entry" then
+      Server.json (invalid_request_error "invalid type, only entry is supported") ~status:400
+    else 
+      let slug = slugify entry_name in
+      let uid = new_id () in
+      save uid slug entry_type entry_content entry_name entry_published >>= fun () ->
+      let headers = Header.init ()
+       |> fun h -> Header.add h "Location" (base_url ^ "/" ^ uid ^ "/" ^ slug) in
+       Server.string "" ~status:201 ~headers
 
 
 (* Micropub form handler *)
@@ -160,30 +196,18 @@ let handle_form_create body =
     (* Continue to process the entry creation *)
     let entry_type = jform_field jdata ["h"] "entry" in
     let entry_content = jform_field jdata ["content"] "" in
-    let entry_name = jform_field jdata ["name"] "" in
+    let entry_name = jform_field jdata ["name"] "Untitled" in
     let entry_published = jform_field jdata ["published"] (Date.now () |> Date.to_string) in
     if entry_content = "" then
       Server.json (invalid_request_error "missing content") ~status:400
     else if entry_name = "" then
       Server.json (invalid_request_error "missing name") ~status:400
-    else if entry_published = "" then
-      Server.json (invalid_request_error "invalid published") ~status:400
     else if entry_type <> "entry" then
       Server.json (invalid_request_error "invalid type, only entry is supported") ~status:400
     else
-      let obj = `O [
-        "type", `A [ `String ("h-" ^ entry_type) ];
-        "properties", `O [
-          "content", `A [ `String entry_content ];
-          "name", `A [ `String entry_name ];
-          "published", `A [ `String entry_published ];
-        ]
-      ] in
       let slug = slugify entry_name in
-      let js = Ezjsonm.to_string obj in
-      Store.Repo.v config >>=
-      Store.master >>= fun t ->
-        Store.set t ~info:(info "Creating a new entry") ["entries"; slug] js >>= fun () ->
-          let headers = Header.init ()
-           |> fun h -> Header.add h "Location" (base_url ^ "/" ^ slug) in
-          Server.string "" ~status:201 ~headers
+      let uid = new_id () in
+      save uid slug entry_type entry_content entry_name entry_published >>= fun () ->
+      let headers = Header.init ()
+       |> fun h -> Header.add h "Location" (base_url ^ "/" ^ uid ^ "/" ^ slug) in
+       Server.string "" ~status:201 ~headers

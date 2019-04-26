@@ -1,12 +1,13 @@
 open Lwt.Infix
 open Lwt
 open Yurt
+open Printf
 include Cohttp_lwt_unix.Server
 
-open Config
-open Entry
-open Micropub
-open Microformats
+open Entriespub.Config
+open Entriespub.Entry
+open Entriespub.Micropub
+open Entriespub.Microformats
 
 let is_multipart_regexp = Str.regexp "multipart/.*"
 let is_form content_type : bool =
@@ -16,8 +17,32 @@ let is_form content_type : bool =
   else
     false
 
+
+(* Implement missing head helper *)
 let head (r : string) (ep : Yurt.endpoint) (s : Server.server) =
   Server.register_route_string s "HEAD" r ep
+
+
+(* Output a JSON error *)
+let json_error code msg status =
+   let headers = Header.init ()
+   |> fun h -> Header.add h "X-Powered-By" "entries.pub"
+   |> fun h -> Header.add h "Content-Type" "application/json" in
+   Server.json (build_error code msg) ~status ~headers
+
+
+(* Call the token endpoint in order to verify the token validity *)
+let check_auth req =
+    let auth = Yurt_util.unwrap_option_default (Header.get req.Request.headers "Authorization") "" in
+    if auth = "" then
+        Lwt.return false
+    else
+       let headers = Header.init ()
+        |> fun h -> Header.add h "Authorization" auth in
+        Client.get ~headers token_endpoint >>= fun (resp, body) ->
+        match resp with
+        | { Response.status = `OK; _ } -> Lwt.return true
+        | _ -> Lwt.return false
 
 
 (* Create a server *)
@@ -75,7 +100,7 @@ server "127.0.0.1" 7888
 
 (* Micropub endpoint *)
 >| post "/webmention" (fun req params body ->
-  Microformats.test_mf2 >>= fun out ->
+  test_mf2 >>= fun out ->
   json out)
   (*
   Webmention.discover_webmention "http://google.com" >>= fun res ->
@@ -87,16 +112,21 @@ server "127.0.0.1" 7888
 
 (* Handle Micropub queries *)
 >| get "/micropub" (fun req params body ->
+  check_auth req >>= fun auth ->
+  if auth = false then json_error "unauthorized" "bad token" 401 else
  micropub_query req)
 
 (* Micropub endpoint *)
 >| post "/micropub" (fun req params body ->
+  check_auth req >>= fun auth ->
+  if auth = false then json_error "unauthorized" "bad token" 401 else
     (* TODO check auth and handle JSON *)
     let content_type = Yurt_util.unwrap_option_default (Header.get req.Request.headers "Content-Type") "" in
     if content_type = "application/json" then
-      handle_json_create body
+        handle_json_create body
     else
-      handle_form_create body)
+        handle_form_create body
+        )
 
 (* HEAD index *)
 >| head "/" (fun req params body ->
@@ -122,11 +152,12 @@ server "127.0.0.1" 7888
          string "" ~headers ~status:404)
  
 (* Post/entry page *)
->| get "/<slug:string>" (fun req params body ->
+>| get "/<uid:string>/<slug:string>" (fun req params body ->
   let slug = Route.string params "slug" in
+  let uid = Route.string params "uid" in
    Store.Repo.v config >>=
    Store.master >>= fun t ->
-     Store.find t ["entries"; slug] >>= fun some_stored ->
+     Store.find t ["entries"; uid] >>= fun some_stored ->
        match some_stored with
        | Some stored ->
          (* Render the entry *)
@@ -154,6 +185,7 @@ server "127.0.0.1" 7888
          let headers = Header.init ()
          |> add_headers in
          string out ~headers ~status:404)
+
 
 (* Run it *)
 |> run

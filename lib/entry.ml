@@ -22,6 +22,7 @@ let entry_tpl_data jdata =
   let name = jform_field jdata ["properties"; "name"] "" in
   let content = jform_field jdata ["properties"; "content"] "" in
   let published = jform_field jdata ["properties"; "published"] "" in
+  let uid = jform_field jdata ["properties"; "uid"] "" in
   let slug = slugify name in
   `O [
     "name", `String name;
@@ -31,7 +32,8 @@ let entry_tpl_data jdata =
     "published_pretty", `String (Date.of_string published |> Date.to_pretty);
     "author_name", `String author_name;
     "author_email", `String author_email;
-    "url", `String (base_url ^ "/" ^ slug);
+    "url", `String (base_url ^ "/" ^ uid ^ "/" ^ slug);
+    "uid", `String uid;
   ]
 
 let path_to_slug str =

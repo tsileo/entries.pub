@@ -28,12 +28,6 @@ module Date = struct
   let of_string s = D.From.string parseR s
 end
 
-(* Irmin config *)
-let config = Irmin_git.config ~bare:false "./db"
-
-let author = "entries.pub <dev@entries.pub>"
- 
-let info fmt = Irmin_unix.info ~author fmt
 
 (* Read the file as a string *)
 let load_file f =
@@ -59,11 +53,15 @@ let find l key =
   | _ -> assert false
 
 (* Micropub API error *)
-let invalid_request_error desc = 
+let build_error code desc = 
   `O [
-    "error",  `String "invalid_request";
+    "error",  `String code;
     "error_description", `String desc;
   ]
+
+(* Micropub API error *)
+let invalid_request_error desc = 
+  build_error "invalid_request" desc
 
 (* Return the first item of the given list or a data *)
 let jform_field jdata k default =
@@ -91,6 +89,15 @@ let blog_name = jdata_field rconf ["blog_name"] "Untitled"
 let author_name = jdata_field rconf ["author_name"] "Dev"
 let author_email = jdata_field rconf ["author_email"] "dev@entries.pub"
 let websub_endpoint = jdata_field rconf ["websub_endpoint"] ""
+let token_endpoint = jdata_field rconf ["token_endpoint"] ""
+
+(* For Irmin (a la Git) *)
+let author = author_email ^ " <" ^ author_email ^ ">"
+
+(* Irmin config *)
+let config = Irmin_git.config ~bare:false "./db"
+ 
+let info fmt = Irmin_unix.info ~author fmt
 
 let add_headers h =
    h

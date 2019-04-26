@@ -15,3 +15,10 @@ WIP IndieWeb blog engine
    - for the Atom feed
  - Webmention support
  - Syndicate to ActivityPub via [microblog.pub](https://github.com/tsileo/microblog.pub)
+
+
+## In order to support TLS 1.3
+
+    $ opam pin add ssl 0.5.5
+    $ export CONDUIT_TLS=openssl
+

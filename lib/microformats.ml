@@ -80,6 +80,6 @@ let parse url soup target =
 
 
 let test_mf2 =
-  Client.get "https://a4.io" >>= fun (resp, body) ->
+  Client.get "https://google.com" >>= fun (resp, body) ->
     let soup = body |> Soup.parse in
-    (parse "https://a4.io" soup "http://google.com") |> Lwt.return
+    (parse "https://google.com" soup "http://google.com") |> Lwt.return

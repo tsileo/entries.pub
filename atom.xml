@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <title>{{name}}</title>
     <link href="{{base_url}}/atom.xml" rel="self" type="application/atom+xml"></link>
-    {{#websub_endpoint}}<link rel="hub" href="{{websub_endpoint}}"></link>{{/websub_endpoint}}
+    <link rel="hub" href="{{websub_endpoint}}"></link>
     <link href="{{base_url}}/" rel="alternate"></link>
     <id>{{base_url}}/</id>
     <updated>{{updated}}</updated>
