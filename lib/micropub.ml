@@ -6,6 +6,9 @@ include Cohttp_lwt_unix.Server
 open Config
 open Entry
 
+let build_url uid slug =
+  base_url ^ "/" ^ uid ^ "/" ^ slug
+
 (* Micropub GET handler *)
 let micropub_query req =
  (* TODO check auth and handle JSON *)
@@ -135,15 +138,15 @@ let micropub_update url jdata =
 
 (* Generate a random ID (hex-encoded) *)
 let new_id () =
-    let fd = Unix.openfile "/dev/urandom" [Unix.O_RDONLY] 0o400 in
-    let len = 8 in
-    let buff = Bytes.create len in
-    Unix.read fd buff 0 len;
-    Unix.close fd;
-    Hex.of_string (Bytes.unsafe_to_string buff)
-    |> Hex.show
+  let fd = Unix.openfile "/dev/urandom" [Unix.O_RDONLY] 0o400 in
+  let len = 8 in
+  let buff = Bytes.create len in
+  Unix.read fd buff 0 len;
+  Unix.close fd;
+  Hex.of_string (Bytes.unsafe_to_string buff)
+  |> Hex.show
 
-
+(* Save a new entry *)
 let save uid slug entry_type entry_content entry_name entry_published =
       let obj = `O [
         "type", `A [ `String ("h-" ^ entry_type) ];
@@ -181,7 +184,7 @@ let handle_json_create body =
       let uid = new_id () in
       save uid slug entry_type entry_content entry_name entry_published >>= fun () ->
       let headers = Header.init ()
-       |> fun h -> Header.add h "Location" (base_url ^ "/" ^ uid ^ "/" ^ slug) in
+       |> fun h -> Header.add h "Location" (build_url uid slug) in
        Server.string "" ~status:201 ~headers
 
 
@@ -209,5 +212,5 @@ let handle_form_create body =
       let uid = new_id () in
       save uid slug entry_type entry_content entry_name entry_published >>= fun () ->
       let headers = Header.init ()
-       |> fun h -> Header.add h "Location" (base_url ^ "/" ^ uid ^ "/" ^ slug) in
+       |> fun h -> Header.add h "Location" (build_url uid slug) in
        Server.string "" ~status:201 ~headers

@@ -17,33 +17,31 @@ let is_form content_type : bool =
   else
     false
 
-
 (* Implement missing head helper *)
 let head (r : string) (ep : Yurt.endpoint) (s : Server.server) =
   Server.register_route_string s "HEAD" r ep
 
-
 (* Output a JSON error *)
 let json_error code msg status =
-   let headers = Header.init ()
-   |> fun h -> Header.add h "X-Powered-By" "entries.pub"
-   |> fun h -> Header.add h "Content-Type" "application/json" in
-   Server.json (build_error code msg) ~status ~headers
+  let headers = Header.init () in
+  Header.add headers "X-Powered-By" "entries.pub";
+  Header.add headers "Content-Type" "application/json";
 
+  Server.json (build_error code msg) ~status ~headers
 
 (* Call the token endpoint in order to verify the token validity *)
 let check_auth req =
-    let auth = Yurt_util.unwrap_option_default (Header.get req.Request.headers "Authorization") "" in
-    if auth = "" then
-        Lwt.return false
-    else
-       let headers = Header.init ()
-        |> fun h -> Header.add h "Authorization" auth in
-        Client.get ~headers token_endpoint >>= fun (resp, body) ->
-        match resp with
-        | { Response.status = `OK; _ } -> Lwt.return true
-        | _ -> Lwt.return false
-
+  let auth = Yurt_util.unwrap_option_default (Header.get req.Request.headers "Authorization") "" in
+  if auth = "" then
+    Lwt.return false
+  else
+    let headers = Header.init () in
+    Header.add headers "Authorization" auth;
+    
+    Client.get ~headers token_endpoint >>= fun (resp, body) ->
+    match resp with
+    | { Response.status = `OK; _ } -> Lwt.return true
+    | _ -> Lwt.return false
 
 (* Create a server *)
 let _ =
@@ -71,10 +69,10 @@ server "127.0.0.1" 7888
       "entries", `A entries;
     ] in
     let out = Mustache.render atom_tpl dat in
-    let headers = Header.init ()
-      |> fun h -> Header.add h "Content-Type" "application/xml"
-      |> fun h -> Header.add h "Link" "</atom.xml>; rel=\"self\""
-      |> fun h -> Header.add h "Link" ("<" ^ websub_endpoint ^ ">; rel=\"hub\"") in
+    let headers = Header.init () in
+    Header.add headers "Content-Type" "application/xml";
+    Header.add headers "Link" "</atom.xml>; rel=\"self\"";
+    Header.add headers "Link" ("<" ^ websub_endpoint ^ ">; rel=\"hub\"");
     string out ~headers)
 
 (* Index *)

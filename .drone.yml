@@ -8,8 +8,10 @@ steps:
       - sudo apt install -y libgmp-dev perl pkg-config libssl-dev m4
       - sudo chown -R opam .
       - git -C /home/opam/opam-repository pull origin && opam update
-      - opam install -y yurt lwt irmin-unix odate omd mustache yaml lwt_ssl lambdasoup dune
+      - opam pin add ssl 0.5.5
+      - opam install -y alcotest yurt lwt irmin-unix odate omd mustache yaml lwt_ssl lambdasoup dune
       - eval $(opam config env)
+      - export CONDUIT_TLS=openssl
       # Build the entriespub binary
       - make
       # Unit tests
