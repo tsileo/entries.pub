@@ -33,18 +33,21 @@ let json_error code msg status =
 let check_auth req =
   let auth = Yurt_util.unwrap_option_default (Header.get req.Request.headers "Authorization") "" in
   if auth = "" then
-    Lwt.return false
+     Lwt.return false
   else
-    let headers = Header.init () in
-    Header.add headers "Authorization" auth;
-    
+    let headers =
+      Header.init ()
+      |> fun h -> Header.add h "Authorization" auth in
+
     Client.get ~headers token_endpoint >>= fun (resp, body) ->
     match resp with
-    | { Response.status = `OK; _ } -> Lwt.return true
+    | { Response.status = `OK } -> Lwt.return true
     | _ -> Lwt.return false
 
 (* Create a server *)
 let _ =
+Log.set_log_level Log.DEBUG;
+Log.set_output stdout;
 let open Server in
 server "127.0.0.1" 7888
 
@@ -77,6 +80,7 @@ server "127.0.0.1" 7888
 
 (* Index *)
 >| get "/" (fun req params body ->
+  Log.info "%s" "GET /";
   Store.Repo.v config >>=
   Store.master >>= fun t ->
   Store.list t ["entries"] >>= fun keys ->
