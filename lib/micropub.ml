@@ -16,10 +16,8 @@ let micropub_query req =
   if q = "syndicate-to" then Server.json (`O ["syndicate-to", `A []]) ~headers else
   if q = "source" then begin
   if url = "" then Server.json (invalid_request_error "missing url") ~status:400 ~headers else
-  let (uid, slug) = get_uid_and_slug (Uri.of_string url |> Uri.path) in 
-  Store.Repo.v config >>=
-  Store.master >>= fun t ->
-  Store.find t ["entries"; uid] >>= fun some_stored ->
+  let (uid, slug) = get_uid_and_slug (url |> Uri.of_string |> Uri.path) in 
+  Entry.get uid >>= fun some_stored ->
     match some_stored with
     | Some stored ->
       let current_data = Ezjsonm.(from_string stored) in
@@ -32,13 +30,11 @@ let micropub_query req =
 (* Micropub delete action handler *)
 let micropub_delete url =
   if url = "" then Server.json (invalid_request_error "missing url") ~status:400 else
-  let (uid, slug) = get_uid_and_slug (Uri.of_string url |> Uri.path) in 
-  Store.Repo.v config >>=
-  Store.master >>= fun t ->
-  Store.find t ["entries"; uid] >>= fun some_stored ->
+  let (uid, slug) = get_uid_and_slug (url |> Uri.of_string |> Uri.path) in 
+  Entry.get uid >>= fun some_stored ->
   match some_stored with
   | Some stored ->
-    Store.remove t ~info:(info "Deleting an entry") ["entries"; uid] >>= fun () ->
+    Entry.remove uid >>= fun () ->
       Websub.ping (base_url ^ "atom.xml") >>= fun (_) ->
       Server.string "" ~status:204
   | None -> Server.json (`O ["error", `String "url not found"]) ~status:404
@@ -112,10 +108,8 @@ let micropub_update_replace current_data jdata =
 let micropub_update url jdata =
   Log.info "URL=%s" (Uri.of_string url |> Uri.path);
   if url = "" then Server.json (invalid_request_error "missing url") ~status:400 else
-  let (uid, slug) = get_uid_and_slug (Uri.of_string url |> Uri.path) in 
-  Store.Repo.v config >>=
-  Store.master >>= fun t ->
-  Store.find t ["entries"; uid] >>= fun some_stored ->
+  let (uid, slug) = get_uid_and_slug (url |> Uri.of_string |> Uri.path) in 
+  Entry.get uid >>= fun some_stored ->
   match some_stored with
   | Some stored ->
     let current_data = Ezjsonm.(from_string stored) in
@@ -125,8 +119,8 @@ let micropub_update url jdata =
     let slug = slugify (jform_field (`O last_doc) ["properties"; "name"] "") in
     if slug = "" then failwith "no slug" else
     let js = Ezjsonm.(to_string (`O last_doc)) in
-    Store.set t ~info:(info "Updating an entry") ["entries"; uid] js >>= fun () ->
-      Websub.ping (base_url ^ "atom.xml") >>= fun (_) ->
+    Entry.set uid js >>= fun () ->
+    Websub.ping (base_url ^ "atom.xml") >>= fun (_) ->
       let headers = Header.init ()
       |> fun h -> Header.add h "Location" (build_url uid slug)
       in

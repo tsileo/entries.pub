@@ -77,4 +77,12 @@ let save uid slug entry_type entry_content entry_name entry_published =
   Store.master >>= fun t ->
     Store.set t ~info:(info "Creating a new entry") ["entries"; uid] js
 
+let remove uid =
+  Store.Repo.v config >>=
+  Store.master >>= fun t ->
+    Store.remove t ~info:(info "Deleting an entry") ["entries"; uid]
 
+let set uid js =
+  Store.Repo.v config >>=
+  Store.master >>= fun t ->
+  Store.set t ~info:(info "Updating an entry") ["entries"; uid] js
