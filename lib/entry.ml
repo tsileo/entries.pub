@@ -3,6 +3,7 @@ open Lwt
 open Yurt
 include Cohttp_lwt_unix.Server
 open Config
+open Util
 
 (* Slugify replaces whitespaces by dashes, lowecases and remove any non alphanum chars. *)
 let slugify k =
@@ -11,7 +12,7 @@ let slugify k =
   |> String.lowercase_ascii
   |> Str.global_replace (Str.regexp "[^a-z0-9\\-]") ""
 
-
+(* Helper for sorting entrie by date *)
 let compare_entry_data a b =
   let a_published = jdata_field a ["published"] "" in
   let b_published = jdata_field b ["published"] "" in
@@ -48,3 +49,8 @@ let iter () =
       Store.get t ["entries"; s] >>= fun stored ->
         stored |> Ezjsonm.from_string |> entry_tpl_data |> Lwt.return
     ) keys)
+
+let get uid =
+  Store.Repo.v config >>=
+  Store.master >>= fun t ->
+    Store.find t ["entries"; uid]

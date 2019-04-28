@@ -5,6 +5,7 @@ include Cohttp_lwt_unix.Server
 
 open Config
 open Entry
+open Util
 
 let build_url uid slug =
   base_url ^ "/" ^ uid ^ "/" ^ slug
@@ -148,20 +149,23 @@ let new_id () =
 
 (* Save a new entry *)
 let save uid slug entry_type entry_content entry_name entry_published =
-      let obj = `O [
-        "type", `A [ `String ("h-" ^ entry_type) ];
-        "properties", `O [
-          "content", `A [ `String entry_content ];
-          "name", `A [ `String entry_name ];
-          "published", `A [ `String entry_published ];
-          "uid", `A [ `String uid ];
-        ]
-      ] in
-      let js = Ezjsonm.to_string obj in
-      Store.Repo.v config >>=
-      Store.master >>= fun t ->
-        Store.set t ~info:(info "Creating a new entry") ["entries"; uid] js
-
+  (* Serialize the entry to JSON microformats2 format *)
+  let obj = `O [
+    "type", `A [ `String entry_type ];
+    "properties", `O [
+      "content", `A [ `String entry_content ];
+      "name", `A [ `String entry_name ];
+      "published", `A [ `String entry_published ];
+      "uid", `A [ `String uid ];
+      "url", `A [ `String (build_url uid slug) ];
+    ]
+  ] in
+  (* JSON serialize *)
+  let js = Ezjsonm.to_string obj in
+  (* Save to repo *)
+  Store.Repo.v config >>=
+  Store.master >>= fun t ->
+    Store.set t ~info:(info "Creating a new entry") ["entries"; uid] js
 
 (* Micropub JSON handler *)
 let handle_json_create body =
@@ -210,7 +214,7 @@ let handle_form_create body =
     else
       let slug = slugify entry_name in
       let uid = new_id () in
-      save uid slug entry_type entry_content entry_name entry_published >>= fun () ->
+      save uid slug ("h-" ^ entry_type) entry_content entry_name entry_published >>= fun () ->
       let headers = Header.init ()
        |> fun h -> Header.add h "Location" (build_url uid slug) in
        Server.string "" ~status:201 ~headers

@@ -5,13 +5,14 @@ open Printf
 include Cohttp_lwt_unix.Server
 
 open Entriespub
-open Entriespub.Config
 open Entriespub.Entry
 open Entriespub.Micropub
 open Entriespub.Microformats
+open Entriespub.Util
+open Entriespub.Config
 
 let is_multipart_regexp = Str.regexp "multipart/.*"
-let is_form content_type : bool =
+let is_form content_type =
   let is_multipart = Str.string_match (is_multipart_regexp) content_type 0 in
   if is_multipart || content_type = "application/x-www-form-urlencoded" then
     true
@@ -45,6 +46,13 @@ let check_auth req =
     | { Response.status = `OK } -> Lwt.return true
     | _ -> Lwt.return false
 
+(* Log HTTP request to stdout *)
+let log_req req =
+  let meth = req |> Request.meth |> Code.string_of_method in
+  let path = req |> Request.uri |> Uri.path in
+  Log.info "%s %s" meth path;
+  ()
+
 (* Create a server *)
 let _ =
 Log.set_log_level Log.DEBUG;
@@ -54,11 +62,12 @@ server "127.0.0.1" 7888
 
 (* Atom feed *)
 >| get "/atom.xml" (fun req params body ->
+  log_req req; 
   Entry.iter () >>= fun entries ->
-    (* Compute the updated field *)
+    (* Compute the "updated" field *)
     let updated = if List.length entries > 0 then
-        let last_one = List.hd entries in
-        Ezjsonm.(get_string (find last_one ["published"]))
+      let last_one = List.hd entries in
+      Ezjsonm.(get_string (find last_one ["published"]))
     else "" in
     let dat = `O [
       "websub_endpoint", `String websub_endpoint;
@@ -74,16 +83,17 @@ server "127.0.0.1" 7888
     |> fun h -> Header.add h "Link" ("<" ^ websub_endpoint ^ ">; rel=\"hub\"") in
     string out ~headers)
 
+(* HEAD index *)
+>| head "/" (fun req params body ->
+  log_req req; 
+  let headers = Header.init ()
+  |> Util.add_links base_url in
+   string "" ~headers)
+
 (* Index *)
 >| get "/" (fun req params body ->
-  Log.info "%s" "GET /";
-  Store.Repo.v config >>=
-  Store.master >>= fun t ->
-  Store.list t ["entries"] >>= fun keys ->
-    Lwt_list.map_s (fun (s, c) ->
-      Store.get t ["entries"; s] >>= fun stored ->
-        stored |> Ezjsonm.from_string |> entry_tpl_data |> Lwt.return
-    ) keys >>= fun dat ->
+  log_req req; 
+  Entry.iter () >>= fun dat ->
     let dat = `O [
       "entries", `A (List.sort compare_entry_data dat);
       "base_url", `String base_url;
@@ -111,78 +121,71 @@ server "127.0.0.1" 7888
 
 (* Handle Micropub queries *)
 >| get "/micropub" (fun req params body ->
+  log_req req; 
   check_auth req >>= fun auth ->
   if auth = false then json_error "unauthorized" "bad token" 401 else
  micropub_query req)
 
 (* Micropub endpoint *)
 >| post "/micropub" (fun req params body ->
+  log_req req; 
   check_auth req >>= fun auth ->
   if auth = false then json_error "unauthorized" "bad token" 401 else
-    (* TODO check auth and handle JSON *)
-    let content_type = Yurt_util.unwrap_option_default (Header.get req.Request.headers "Content-Type") "" in
-    if content_type = "application/json" then
-        handle_json_create body
-    else
-        handle_form_create body
-        )
-
-(* HEAD index *)
->| head "/" (fun req params body ->
-  let headers = Header.init ()
-  |> Util.add_links base_url in
-   string "" ~headers)
+  let content_type = Yurt_util.unwrap_option_default (Header.get req.Request.headers "Content-Type") "" in
+  if content_type = "application/json" then
+    handle_json_create body
+  else
+    handle_form_create body)
  
 (* HEAD Post/entry page *)
->| head "/<slug:string>" (fun req params body ->
-  let slug = Route.string params "slug" in
-   Store.Repo.v config >>=
-   Store.master >>= fun t ->
-     Store.find t ["entries"; slug] >>= fun some_stored ->
-       match some_stored with
-       | Some stored ->
-         (string "")
-       | None ->
-        (* 404 *)
-         string "" ~status:404)
- 
+>| head "/<uid:string>/<slug:string>" (fun req params body ->
+  log_req req; 
+  let uid = Route.string params "uid" in
+  Entry.get uid >>= fun some_stored ->
+    match some_stored with
+    | Some stored ->
+      let headers = Header.init ()
+      |> Util.add_links base_url in
+      string "" ~headers
+    | None ->
+      (* 404 *)
+      string "" ~status:404)
+
 (* Post/entry page *)
 >| get "/<uid:string>/<slug:string>" (fun req params body ->
+  log_req req; 
   let slug = Route.string params "slug" in
   let uid = Route.string params "uid" in
-   Store.Repo.v config >>=
-   Store.master >>= fun t ->
-     Store.find t ["entries"; uid] >>= fun some_stored ->
-       match some_stored with
-       | Some stored ->
-         (* Render the entry *)
-         let nstored = stored |> Ezjsonm.from_string |> entry_tpl_data in
-         let dat = `O [
-           "is_index", `Bool false;
-           "is_entry", `Bool true;
-           "is_404", `Bool false;
-           "base_url", `String base_url;
-           "entry", nstored;
-         ] in
-         let out = Mustache.render html_tpl dat in
-         let headers = Header.init ()
-         |> Util.set_content_type Util.text_html
-         |> Util.add_links base_url in
-         (string out ~headers)
-       | None ->
-         (* Return a 404 *)
-         let dat = `O [
-           "is_index", `Bool false;
-           "is_entry", `Bool false;
-           "is_404", `Bool true;
-           "base_url", `String base_url;
-         ] in
-         let out = Mustache.render html_tpl dat in
-         let headers = Header.init ()
-         |> Util.set_content_type Util.text_html
-         |> Util.add_links base_url in
-         string out ~headers ~status:404)
-
+  Entry.get uid >>= fun some_stored ->
+    match some_stored with
+    | Some stored ->
+      (* Render the entry *)
+      let nstored = stored |> Ezjsonm.from_string |> entry_tpl_data in
+      let dat = `O [
+        "is_index", `Bool false;
+        "is_entry", `Bool true;
+        "is_404", `Bool false;
+        "base_url", `String base_url;
+        "entry", nstored;
+      ] in
+      let out = Mustache.render html_tpl dat in
+      let headers = Header.init ()
+      |> Util.set_content_type Util.text_html
+      |> Util.add_links base_url in
+      (string out ~headers)
+   | None ->
+     (* Return a 404 *)
+     let dat = `O [
+       "is_index", `Bool false;
+       "is_entry", `Bool false;
+       "is_404", `Bool true;
+       "base_url", `String base_url;
+     ] in
+     let out = Mustache.render html_tpl dat in
+     let headers = Header.init ()
+     |> Util.set_content_type Util.text_html
+     |> Util.add_links base_url in
+     string out ~headers ~status:404)
 
 (* Run it *)
 |> run
