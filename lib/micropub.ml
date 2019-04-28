@@ -7,12 +7,12 @@ open Utils
 
 (* Micropub GET handler *)
 let micropub_query req =
- (* TODO handle JSON *)
   let headers = Header.init ()
   |> set_content_type "application/json" in
   let q = Yurt_util.unwrap_option_default (Query.string req "q") "" in
   let url = Yurt_util.unwrap_option_default (Query.string req "url") "" in
   if q = "config" then Server.json (`O []) ~headers else
+  (* TODO syndacate to a microblog.pub instance? *)
   if q = "syndicate-to" then Server.json (`O ["syndicate-to", `A []]) ~headers else
   if q = "source" then begin
   if url = "" then Server.json (invalid_request_error "missing url") ~status:400 ~headers else
@@ -35,7 +35,7 @@ let micropub_delete url =
   match some_stored with
   | Some stored ->
     Entry.remove uid >>= fun () ->
-      Websub.ping (base_url ^ "atom.xml") >>= fun (_) ->
+    Websub.ping (base_url ^ "atom.xml") >>= fun (_) ->
       Server.string "" ~status:204
   | None -> Server.json (`O ["error", `String "url not found"]) ~status:404
 
@@ -53,11 +53,11 @@ let micropub_update_delete current_data jdata =
       let new_data =
         current
         |> List.filter (fun x -> not (List.mem x to_delete))
-        |> List.map (fun x -> `String x)
       in
+      (* TODO empty array instead of removing completely *)
       let nl = List.remove_assoc k acc in
       if List.length new_data > 0 then
-        nl @ [k, (`A new_data)]
+        nl @ [k, Ezjsonm.(strings new_data)]
       else
         nl
     ) props d
@@ -140,21 +140,32 @@ let handle_json_create body =
     let entry_type = jform_field jdata ["type"] "" in
     let entry_content = jform_field jdata ["properties"; "content"] "" in
     let entry_name = jform_field jdata ["properties"; "name"] "Untitled" in
+    let entry_category = jform_strings jdata ["properties"; "category"] in
     let entry_published = jform_field jdata ["properties"; "published"] (Date.now () |> Date.to_string) in
     if entry_type <> "h-entry" then
       Server.json (invalid_request_error "invalid type, only entry is supported") ~status:400
     else 
       let slug = slugify entry_name in
       let uid = new_id () in
-      save uid slug entry_type entry_content entry_name entry_published >>= fun () ->
+      save uid slug entry_type entry_content entry_name entry_published entry_category >>= fun () ->
       Websub.ping (base_url ^ "atom.xml") >>= fun (_) ->
       let headers = Header.init ()
        |> fun h -> Header.add h "Location" (build_url uid slug) in
        Server.string "" ~status:201 ~headers
 
+(* combime all the "category[]" field into one *)
+let parse_cat dat =
+  (List.fold_left (fun acc (k, v) ->
+    if k = "category[]" then
+      acc @ [Ezjsonm.(get_strings v) |> List.hd]
+    else
+      acc
+  ) [] Ezjsonm.(get_dict dat))
+
 (* Micropub form handler *)
 let handle_form_create body =
   Form.urlencoded_json body >>= fun p ->
+    Log.info "%s" Ezjsonm.(to_string p);
     let jdata = Ezjsonm.(value p) in
     (* Handle actions *)
     let action = jform_field jdata ["action"] "" in
@@ -164,6 +175,7 @@ let handle_form_create body =
     let entry_type = jform_field jdata ["h"] "entry" in
     let entry_content = jform_field jdata ["content"] "" in
     let entry_name = jform_field jdata ["name"] "Untitled" in
+    let entry_category = parse_cat jdata in
     let entry_published = jform_field jdata ["published"] (Date.now () |> Date.to_string) in
     if entry_content = "" then
       Server.json (invalid_request_error "missing content") ~status:400
@@ -174,7 +186,7 @@ let handle_form_create body =
     else
       let slug = slugify entry_name in
       let uid = new_id () in
-      save uid slug ("h-" ^ entry_type) entry_content entry_name entry_published >>= fun () ->
+      save uid slug ("h-" ^ entry_type) entry_content entry_name entry_published entry_category >>= fun () ->
       Websub.ping (base_url ^ "atom.xml") >>= fun (_) ->
       let headers = Header.init ()
        |> fun h -> Header.add h "Location" (build_url uid slug) in

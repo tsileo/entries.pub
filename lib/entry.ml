@@ -56,9 +56,19 @@ let get uid =
   Store.Repo.v config >>=
   Store.master >>= fun t ->
     Store.find t ["entries"; uid]
+
+let remove uid =
+  Store.Repo.v config >>=
+  Store.master >>= fun t ->
+    Store.remove t ~info:(info "Deleting entry") ["entries"; uid]
+
+let set uid js =
+  Store.Repo.v config >>=
+  Store.master >>= fun t ->
+  Store.set t ~info:(info "Updating entry") ["entries"; uid] js
  
 (* Save a new entry *)
-let save uid slug entry_type entry_content entry_name entry_published =
+let save uid slug entry_type entry_content entry_name entry_published entry_category =
   (* Serialize the entry to JSON microformats2 format *)
   let obj = `O [
     "type", `A [ `String entry_type ];
@@ -68,21 +78,11 @@ let save uid slug entry_type entry_content entry_name entry_published =
       "published", `A [ `String entry_published ];
       "uid", `A [ `String uid ];
       "url", `A [ `String (build_url uid slug) ];
+      "category", Ezjsonm.(strings entry_category);
     ]
   ] in
   (* JSON serialize *)
   let js = Ezjsonm.to_string obj in
+  Log.info "%s" js;
   (* Save to repo *)
-  Store.Repo.v config >>=
-  Store.master >>= fun t ->
-    Store.set t ~info:(info "Creating a new entry") ["entries"; uid] js
-
-let remove uid =
-  Store.Repo.v config >>=
-  Store.master >>= fun t ->
-    Store.remove t ~info:(info "Deleting an entry") ["entries"; uid]
-
-let set uid js =
-  Store.Repo.v config >>=
-  Store.master >>= fun t ->
-  Store.set t ~info:(info "Updating an entry") ["entries"; uid] js
+  set uid js

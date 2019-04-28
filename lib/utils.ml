@@ -58,6 +58,14 @@ let jform_field jdata k default =
   else
     default
 
+(* Return the first item of the given list or a data *)
+let jform_strings jdata k =
+  if Ezjsonm.(mem jdata k) then
+    Ezjsonm.(get_strings (find jdata k))
+  else
+    []
+
+
 (* Read the file as a string *)
 let load_file f =
   let ic = open_in f in

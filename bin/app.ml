@@ -121,7 +121,7 @@ server "127.0.0.1" 7888
   let v = Yurt_util.unwrap_option_default res "" in
   string v)
   *)
-  Websub.ping (base_url ^ "/atom.xml") >>= fun res ->
+  Entriespub.Websub.ping (base_url ^ "/atom.xml") >>= fun res ->
   if res then string "yes" else string "no")
 
 (* Handle Micropub queries *)
