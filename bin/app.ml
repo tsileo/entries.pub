@@ -64,6 +64,7 @@ server "127.0.0.1" 7888
 >| post "/atom.xml" (fun req params body ->
   log_req req; string "")
 
+(* TODO JSON feed *)
 
 (* Atom feed *)
 >| get "/atom.xml" (fun req params body ->

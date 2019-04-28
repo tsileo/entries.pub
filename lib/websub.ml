@@ -3,8 +3,6 @@ open Yurt
 open Cohttp
 open Soup
 
-open Entriespub
-
 (* Notify the WebSub hub that a resource has been updated *)
 let ping updated =
   (* Ensure a WebSub endpoint is set *)
