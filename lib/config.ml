@@ -37,3 +37,6 @@ let author = author_email ^ " <" ^ author_email ^ ">"
 let config = Irmin_git.config ~bare:false "./db"
  
 let info fmt = Irmin_unix.info ~author fmt
+
+let build_url uid slug =
+  base_url ^ "/" ^ uid ^ "/" ^ slug

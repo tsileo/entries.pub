@@ -61,6 +61,10 @@ Log.set_output stdout;
 let open Server in
 server "127.0.0.1" 7888
 
+>| post "/atom.xml" (fun req params body ->
+  log_req req; string "")
+
+
 (* Atom feed *)
 >| get "/atom.xml" (fun req params body ->
   log_req req; 
@@ -80,7 +84,7 @@ server "127.0.0.1" 7888
     let out = Mustache.render atom_tpl dat in
     let headers = Header.init ()
     |> set_content_type "application/xml"
-    |> fun h -> Header.add h "Link" "</atom.xml>; rel=\"self\""
+    |> fun h -> Header.add h "Link" ("<" ^ base_url ^ "/atom.xml>; rel=\"self\"")
     |> fun h -> Header.add h "Link" ("<" ^ websub_endpoint ^ ">; rel=\"hub\"") in
     string out ~headers)
 
@@ -110,15 +114,15 @@ server "127.0.0.1" 7888
 
 (* Micropub endpoint *)
 >| post "/webmention" (fun req params body ->
+  (*
   test_mf2 >>= fun out ->
   json out)
-  (*
   Webmention.discover_webmention "http://google.com" >>= fun res ->
   let v = Yurt_util.unwrap_option_default res "" in
   string v)
-  Websub.ping "https://google.com" >>= fun res ->
-  if res then string "yes" else string "no")
   *)
+  Websub.ping (base_url ^ "/atom.xml") >>= fun res ->
+  if res then string "yes" else string "no")
 
 (* Handle Micropub queries *)
 >| get "/micropub" (fun req params body ->

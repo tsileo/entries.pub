@@ -1,51 +1,45 @@
-open Lwt.Infix
 open Lwt
 open Yurt
-include Cohttp_lwt_unix.Server
 
 open Config
 open Entry
 open Utils
 
-let build_url uid slug =
-  base_url ^ "/" ^ uid ^ "/" ^ slug
-
 (* Micropub GET handler *)
 let micropub_query req =
- (* TODO check auth and handle JSON *)
+ (* TODO handle JSON *)
+  let headers = Header.init ()
+  |> set_content_type "application/json" in
   let q = Yurt_util.unwrap_option_default (Query.string req "q") "" in
   let url = Yurt_util.unwrap_option_default (Query.string req "url") "" in
-  if q = "config" then Server.json (`O []) else
-  if q = "syndicate-to" then Server.json (`O ["syndicate-to", `A []]) else
+  if q = "config" then Server.json (`O []) ~headers else
+  if q = "syndicate-to" then Server.json (`O ["syndicate-to", `A []]) ~headers else
   if q = "source" then begin
-  if url = "" then
-    (Server.json (invalid_request_error "url") ~status:400)
-  else
-  let slug = Uri.of_string url |> Uri.path |> path_to_slug in
+  if url = "" then Server.json (invalid_request_error "missing url") ~status:400 ~headers else
+  let (uid, slug) = get_uid_and_slug (Uri.of_string url |> Uri.path) in 
   Store.Repo.v config >>=
   Store.master >>= fun t ->
-  Store.find t ["entries"; slug] >>= fun some_stored ->
+  Store.find t ["entries"; uid] >>= fun some_stored ->
     match some_stored with
     | Some stored ->
       let current_data = Ezjsonm.(from_string stored) in
-      Server.json current_data
+      Server.json current_data ~headers
     | None ->
-      Server.json (`O ["error", `String "url not found"]) ~status:404
+      Server.json (`O ["error", `String "url not found"]) ~status:404 ~headers
   end else
-  Server.json (`O [])
+  Server.json (`O []) ~headers
 
 (* Micropub delete action handler *)
 let micropub_delete url =
-  if url == "" then
-    Server.json (invalid_request_error "url") ~status:400
-  else
-  let slug = Uri.of_string url |> Uri.path |> path_to_slug in
+  if url = "" then Server.json (invalid_request_error "missing url") ~status:400 else
+  let (uid, slug) = get_uid_and_slug (Uri.of_string url |> Uri.path) in 
   Store.Repo.v config >>=
   Store.master >>= fun t ->
-  Store.find t ["entries"; slug] >>= fun some_stored ->
+  Store.find t ["entries"; uid] >>= fun some_stored ->
   match some_stored with
   | Some stored ->
-    Store.remove t ~info:(info "Deleting an entry") ["entries"; slug] >>= fun () ->
+    Store.remove t ~info:(info "Deleting an entry") ["entries"; uid] >>= fun () ->
+      Websub.ping (base_url ^ "atom.xml") >>= fun (_) ->
       Server.string "" ~status:204
   | None -> Server.json (`O ["error", `String "url not found"]) ~status:404
 
@@ -116,11 +110,12 @@ let micropub_update_replace current_data jdata =
 
 
 let micropub_update url jdata =
-  if url = "" then Server.json (invalid_request_error "url") ~status:400 else
-  let slug = Uri.of_string url |> Uri.path |> path_to_slug in
+  Log.info "URL=%s" (Uri.of_string url |> Uri.path);
+  if url = "" then Server.json (invalid_request_error "missing url") ~status:400 else
+  let (uid, slug) = get_uid_and_slug (Uri.of_string url |> Uri.path) in 
   Store.Repo.v config >>=
   Store.master >>= fun t ->
-  Store.find t ["entries"; slug] >>= fun some_stored ->
+  Store.find t ["entries"; uid] >>= fun some_stored ->
   match some_stored with
   | Some stored ->
     let current_data = Ezjsonm.(from_string stored) in
@@ -130,42 +125,13 @@ let micropub_update url jdata =
     let slug = slugify (jform_field (`O last_doc) ["properties"; "name"] "") in
     if slug = "" then failwith "no slug" else
     let js = Ezjsonm.(to_string (`O last_doc)) in
-    Store.set t ~info:(info "Updating an entry") ["entries"; slug] js >>= fun () ->
+    Store.set t ~info:(info "Updating an entry") ["entries"; uid] js >>= fun () ->
+      Websub.ping (base_url ^ "atom.xml") >>= fun (_) ->
       let headers = Header.init ()
-      |> fun h -> Header.add h "Location" (base_url ^ "/" ^ slug)
+      |> fun h -> Header.add h "Location" (build_url uid slug)
       in
       Server.json ~status:201 ~headers (`O last_doc)
   | None -> Server.json (`O ["error", `String "url not found"]) ~status:404
-
-(* Generate a random ID (hex-encoded) *)
-let new_id () =
-  let fd = Unix.openfile "/dev/urandom" [Unix.O_RDONLY] 0o400 in
-  let len = 8 in
-  let buff = Bytes.create len in
-  Unix.read fd buff 0 len;
-  Unix.close fd;
-  Hex.of_string (Bytes.unsafe_to_string buff)
-  |> Hex.show
-
-(* Save a new entry *)
-let save uid slug entry_type entry_content entry_name entry_published =
-  (* Serialize the entry to JSON microformats2 format *)
-  let obj = `O [
-    "type", `A [ `String entry_type ];
-    "properties", `O [
-      "content", `A [ `String entry_content ];
-      "name", `A [ `String entry_name ];
-      "published", `A [ `String entry_published ];
-      "uid", `A [ `String uid ];
-      "url", `A [ `String (build_url uid slug) ];
-    ]
-  ] in
-  (* JSON serialize *)
-  let js = Ezjsonm.to_string obj in
-  (* Save to repo *)
-  Store.Repo.v config >>=
-  Store.master >>= fun t ->
-    Store.set t ~info:(info "Creating a new entry") ["entries"; uid] js
 
 (* Micropub JSON handler *)
 let handle_json_create body =
@@ -187,10 +153,10 @@ let handle_json_create body =
       let slug = slugify entry_name in
       let uid = new_id () in
       save uid slug entry_type entry_content entry_name entry_published >>= fun () ->
+      Websub.ping (base_url ^ "atom.xml") >>= fun (_) ->
       let headers = Header.init ()
        |> fun h -> Header.add h "Location" (build_url uid slug) in
        Server.string "" ~status:201 ~headers
-
 
 (* Micropub form handler *)
 let handle_form_create body =
@@ -215,6 +181,7 @@ let handle_form_create body =
       let slug = slugify entry_name in
       let uid = new_id () in
       save uid slug ("h-" ^ entry_type) entry_content entry_name entry_published >>= fun () ->
+      Websub.ping (base_url ^ "atom.xml") >>= fun (_) ->
       let headers = Header.init ()
        |> fun h -> Header.add h "Location" (build_url uid slug) in
        Server.string "" ~status:201 ~headers

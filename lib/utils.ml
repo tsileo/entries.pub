@@ -1,5 +1,15 @@
 open Yurt
 
+(* Generate a random ID (hex-encoded) *)
+let new_id () =
+  let fd = Unix.openfile "/dev/urandom" [Unix.O_RDONLY] 0o400 in
+  let len = 8 in
+  let buff = Bytes.create len in
+  Unix.read fd buff 0 len;
+  Unix.close fd;
+  Hex.of_string (Bytes.unsafe_to_string buff)
+  |> Hex.show
+
 (* Helper to parse an entry path (/{uid}/{slug}) *)
 let get_uid_and_slug path =
   let dat = Str.split (Str.regexp "/") path in

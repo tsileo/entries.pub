@@ -56,3 +56,25 @@ let get uid =
   Store.Repo.v config >>=
   Store.master >>= fun t ->
     Store.find t ["entries"; uid]
+ 
+(* Save a new entry *)
+let save uid slug entry_type entry_content entry_name entry_published =
+  (* Serialize the entry to JSON microformats2 format *)
+  let obj = `O [
+    "type", `A [ `String entry_type ];
+    "properties", `O [
+      "content", `A [ `String entry_content ];
+      "name", `A [ `String entry_name ];
+      "published", `A [ `String entry_published ];
+      "uid", `A [ `String uid ];
+      "url", `A [ `String (build_url uid slug) ];
+    ]
+  ] in
+  (* JSON serialize *)
+  let js = Ezjsonm.to_string obj in
+  (* Save to repo *)
+  Store.Repo.v config >>=
+  Store.master >>= fun t ->
+    Store.set t ~info:(info "Creating a new entry") ["entries"; uid] js
+
+

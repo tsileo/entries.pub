@@ -12,6 +12,7 @@ let ping updated =
   (* Do the WebSub ping *)
   let params = ["hub.mode",["publish"]; "hub.url",[updated]] in
   Client.post_form ~params Config.websub_endpoint >>= fun (resp, body) ->
+    (* TODO log the ping with result *)
     let code =
       resp 
       |> Response.status 
