@@ -39,3 +39,12 @@ let entry_tpl_data jdata =
 let path_to_slug str =
   if str = "" then "" else
   String.sub str 1 ((String.length str) - 1)
+
+let iter () =
+  Store.Repo.v config >>=
+  Store.master >>= fun t ->
+  Store.list t ["entries"] >>= fun keys ->
+    (Lwt_list.map_s (fun (s, c) ->
+      Store.get t ["entries"; s] >>= fun stored ->
+        stored |> Ezjsonm.from_string |> entry_tpl_data |> Lwt.return
+    ) keys)

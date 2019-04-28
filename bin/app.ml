@@ -4,6 +4,7 @@ open Yurt
 open Printf
 include Cohttp_lwt_unix.Server
 
+open Entriespub
 open Entriespub.Config
 open Entriespub.Entry
 open Entriespub.Micropub
@@ -53,13 +54,8 @@ server "127.0.0.1" 7888
 
 (* Atom feed *)
 >| get "/atom.xml" (fun req params body ->
-  Store.Repo.v config >>=
-  Store.master >>= fun t ->
-  Store.list t ["entries"] >>= fun keys ->
-    Lwt_list.map_s (fun (s, c) ->
-      Store.get t ["entries"; s] >>= fun stored ->
-        stored |> Ezjsonm.from_string |> entry_tpl_data |> Lwt.return
-    ) keys >>= fun entries ->
+  Entry.iter () >>= fun entries ->
+    (* Compute the updated field *)
     let updated = if List.length entries > 0 then
         let last_one = List.hd entries in
         Ezjsonm.(get_string (find last_one ["published"]))
@@ -72,10 +68,10 @@ server "127.0.0.1" 7888
       "entries", `A entries;
     ] in
     let out = Mustache.render atom_tpl dat in
-    let headers = Header.init () in
-    Header.add headers "Content-Type" "application/xml";
-    Header.add headers "Link" "</atom.xml>; rel=\"self\"";
-    Header.add headers "Link" ("<" ^ websub_endpoint ^ ">; rel=\"hub\"");
+    let headers = Header.init ()
+    |> Util.set_content_type "application/xml"
+    |> fun h -> Header.add h "Link" "</atom.xml>; rel=\"self\""
+    |> fun h -> Header.add h "Link" ("<" ^ websub_endpoint ^ ">; rel=\"hub\"") in
     string out ~headers)
 
 (* Index *)
@@ -97,7 +93,8 @@ server "127.0.0.1" 7888
     ] in
     let out = Mustache.render html_tpl dat in
     let headers = Header.init ()
-      |> add_headers in
+    |> Util.set_content_type Util.text_html
+    |> Util.add_links base_url in
     string out ~headers)
 
 (* Micropub endpoint *)
@@ -133,7 +130,7 @@ server "127.0.0.1" 7888
 (* HEAD index *)
 >| head "/" (fun req params body ->
   let headers = Header.init ()
-   |> add_headers in
+  |> Util.add_links base_url in
    string "" ~headers)
  
 (* HEAD Post/entry page *)
@@ -144,14 +141,10 @@ server "127.0.0.1" 7888
      Store.find t ["entries"; slug] >>= fun some_stored ->
        match some_stored with
        | Some stored ->
-		let headers = Header.init ()
-         |> add_headers in
-         string "" ~headers
+         (string "")
        | None ->
         (* 404 *)
-		let headers = Header.init ()
-         |> add_headers in
-         string "" ~headers ~status:404)
+         string "" ~status:404)
  
 (* Post/entry page *)
 >| get "/<uid:string>/<slug:string>" (fun req params body ->
@@ -173,7 +166,8 @@ server "127.0.0.1" 7888
          ] in
          let out = Mustache.render html_tpl dat in
          let headers = Header.init ()
-           |> add_headers in
+         |> Util.set_content_type Util.text_html
+         |> Util.add_links base_url in
          (string out ~headers)
        | None ->
          (* Return a 404 *)
@@ -185,7 +179,8 @@ server "127.0.0.1" 7888
          ] in
          let out = Mustache.render html_tpl dat in
          let headers = Header.init ()
-         |> add_headers in
+         |> Util.set_content_type Util.text_html
+         |> Util.add_links base_url in
          string out ~headers ~status:404)
 
 
