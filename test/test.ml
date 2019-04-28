@@ -1,4 +1,4 @@
-open Entriespub.Util
+open Entriespub.Utils
 
 let test_get_uid_and_slug = [
   "get_uid_and_slug", `Quick, (fun () -> 

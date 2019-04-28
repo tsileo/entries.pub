@@ -1,7 +1,7 @@
 open Lwt.Infix
 open Lwt
 open Yurt
-include Entriespub.Util
+open Utils
 
 module Store = Irmin_unix.Git.FS.KV(Irmin.Contents.String)
 

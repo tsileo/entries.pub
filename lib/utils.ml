@@ -32,19 +32,19 @@ let invalid_request_error desc =
   build_error "invalid_request" desc
 
 (* Return the first item of the given list or a data *)
+let jdata_field jdata k default =
+  if Ezjsonm.(mem jdata k) then
+    Ezjsonm.(get_string (find jdata k))
+  else
+    default
+
+(* Return the first item of the given list or a data *)
 let jform_field jdata k default =
   if Ezjsonm.(mem jdata k) then
     let items = Ezjsonm.(get_strings (find jdata k)) in
       match items with
         | [] -> default
         | t :: _ -> t
-  else
-    default
-
-(* Return the first item of the given list or a data *)
-let jdata_field jdata k default =
-  if Ezjsonm.(mem jdata k) then
-    Ezjsonm.(get_string (find jdata k))
   else
     default
 

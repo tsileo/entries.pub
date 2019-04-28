@@ -5,7 +5,7 @@ include Cohttp_lwt_unix.Server
 
 open Config
 open Entry
-open Util
+open Utils
 
 let build_url uid slug =
   base_url ^ "/" ^ uid ^ "/" ^ slug

@@ -8,7 +8,7 @@ open Entriespub
 open Entriespub.Entry
 open Entriespub.Micropub
 open Entriespub.Microformats
-open Entriespub.Util
+open Entriespub.Utils
 open Entriespub.Config
 
 let is_multipart_regexp = Str.regexp "multipart/.*"
@@ -25,14 +25,14 @@ let head (r : string) (ep : Yurt.endpoint) (s : Server.server) =
 
 (* Output a JSON error *)
 let json_error code msg status =
-  let headers = Header.init () in
-  Header.add headers "X-Powered-By" "entries.pub";
-  Header.add headers "Content-Type" "application/json";
+  let headers = Header.init ()
+  |> set_content_type "application/json" in
 
   Server.json (build_error code msg) ~status ~headers
 
 (* Call the token endpoint in order to verify the token validity *)
 let check_auth req =
+  (* Get the bearer token from the incoming request *)
   let auth = Yurt_util.unwrap_option_default (Header.get req.Request.headers "Authorization") "" in
   if auth = "" then
      Lwt.return false
@@ -41,6 +41,7 @@ let check_auth req =
       Header.init ()
       |> fun h -> Header.add h "Authorization" auth in
 
+    (* And forward it to the token endpoint *)
     Client.get ~headers token_endpoint >>= fun (resp, body) ->
     match resp with
     | { Response.status = `OK } -> Lwt.return true
@@ -78,7 +79,7 @@ server "127.0.0.1" 7888
     ] in
     let out = Mustache.render atom_tpl dat in
     let headers = Header.init ()
-    |> Util.set_content_type "application/xml"
+    |> set_content_type "application/xml"
     |> fun h -> Header.add h "Link" "</atom.xml>; rel=\"self\""
     |> fun h -> Header.add h "Link" ("<" ^ websub_endpoint ^ ">; rel=\"hub\"") in
     string out ~headers)
@@ -87,7 +88,7 @@ server "127.0.0.1" 7888
 >| head "/" (fun req params body ->
   log_req req; 
   let headers = Header.init ()
-  |> Util.add_links base_url in
+  |> add_links base_url in
    string "" ~headers)
 
 (* Index *)
@@ -103,8 +104,8 @@ server "127.0.0.1" 7888
     ] in
     let out = Mustache.render html_tpl dat in
     let headers = Header.init ()
-    |> Util.set_content_type Util.text_html
-    |> Util.add_links base_url in
+    |> set_content_type text_html
+    |> add_links base_url in
     string out ~headers)
 
 (* Micropub endpoint *)
@@ -145,7 +146,7 @@ server "127.0.0.1" 7888
     match some_stored with
     | Some stored ->
       let headers = Header.init ()
-      |> Util.add_links base_url in
+      |> add_links base_url in
       string "" ~headers
     | None ->
       (* 404 *)
@@ -170,8 +171,8 @@ server "127.0.0.1" 7888
       ] in
       let out = Mustache.render html_tpl dat in
       let headers = Header.init ()
-      |> Util.set_content_type Util.text_html
-      |> Util.add_links base_url in
+      |> set_content_type text_html
+      |> add_links base_url in
       (string out ~headers)
    | None ->
      (* Return a 404 *)
@@ -183,8 +184,8 @@ server "127.0.0.1" 7888
      ] in
      let out = Mustache.render html_tpl dat in
      let headers = Header.init ()
-     |> Util.set_content_type Util.text_html
-     |> Util.add_links base_url in
+     |> set_content_type text_html
+     |> add_links base_url in
      string out ~headers ~status:404)
 
 (* Run it *)

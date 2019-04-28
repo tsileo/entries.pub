@@ -1,9 +1,11 @@
 open Lwt.Infix
 open Lwt
 open Yurt
-include Cohttp_lwt_unix.Server
-open Config
 open Util
+include Cohttp_lwt_unix.Server
+
+open Config
+open Utils
 
 (* Slugify replaces whitespaces by dashes, lowecases and remove any non alphanum chars. *)
 let slugify k =

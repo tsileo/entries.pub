@@ -5,6 +5,8 @@ include Cohttp.Link
 open Cohttp
 include Soup
 
+open Utils
+
 
 let parse url soup target =
   let hcard_soup = try
