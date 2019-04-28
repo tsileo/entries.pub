@@ -46,8 +46,7 @@ let micropub_update_delete current_data jdata =
   let deleted = Ezjsonm.(find jdata ["delete"]) in
   let new_props = match deleted with
   | `O d ->
-    List.fold_left (fun acc x ->
-      let (k, v) = x in
+    List.fold_left (fun acc (k, v) ->
       let current = Ezjsonm.(get_strings (find current_data ["properties"; k])) in
       let to_delete = Ezjsonm.(get_strings v) in
       let new_data =
@@ -65,7 +64,7 @@ let micropub_update_delete current_data jdata =
     List.fold_left (fun acc x ->
       List.remove_assoc x acc
     ) props Ezjsonm.(get_strings deleted)
-  | _ -> failwith "lol" in
+  | _ -> failwith "invalid delete payload" in
   Ezjsonm.(get_dict current_data)
   |> List.remove_assoc "properties"
   |> List.append ["properties", `O new_props]
@@ -125,6 +124,7 @@ let micropub_update url jdata =
       |> fun h -> Header.add h "Location" (build_url uid slug)
       in
       Server.json ~status:201 ~headers (`O last_doc)
+  (* TODO return server_error from util *)
   | None -> Server.json (`O ["error", `String "url not found"]) ~status:404
 
 (* Micropub JSON handler *)
@@ -155,9 +155,14 @@ let handle_json_create body =
 
 (* combime all the "category[]" field into one *)
 let parse_cat dat =
+  if Ezjsonm.(mem dat ["category"]) then
+    (* because Yurt will return an array even if a single value was sent *)
+    Ezjsonm.(get_strings (find dat ["category"]))
+  else
+  (* but it does not handle array in form... *)
   (List.fold_left (fun acc (k, v) ->
     if k = "category[]" then
-      acc @ [Ezjsonm.(get_strings v) |> List.hd]
+      acc @ Ezjsonm.(get_strings v)
     else
       acc
   ) [] Ezjsonm.(get_dict dat))
@@ -174,6 +179,7 @@ let handle_form_create body =
     (* Continue to process the entry creation *)
     let entry_type = jform_field jdata ["h"] "entry" in
     let entry_content = jform_field jdata ["content"] "" in
+    (* TODO better than Untitled *)
     let entry_name = jform_field jdata ["name"] "Untitled" in
     let entry_category = parse_cat jdata in
     let entry_published = jform_field jdata ["published"] (Date.now () |> Date.to_string) in
