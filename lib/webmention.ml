@@ -16,7 +16,7 @@ let verify_incoming_webmention url target =
     let links =
       soup $$ "a[href]"
       |> to_list
-      |> List.map (fun x -> x |> R.attribute "href")
+      |> List.map (R.attribute "href")
     in
     (List.mem target links, Some soup) |> Lwt.return
   with Failure _ ->
@@ -90,6 +90,7 @@ let bad_url u =
     true
   with Ipaddr.Parse_error (_, _) ->
     let h = Uri.of_string u |> Uri.host |> fun x -> Yurt_util.unwrap_option_default x "" in
+    (* TODO check scheme *)
     (* Also reject localhost and invalid URLs *)
     if h = "localhost" || h = "" then
       true
@@ -97,7 +98,7 @@ let bad_url u =
       false
 
 (* Process incoming Webmentions *)
-let process_webmention body =
+let process_incoming_webmention body =
   Form.urlencoded_json body >>= fun p ->
     Log.info "[Webmention] processing payload\n%s" Ezjsonm.(to_string p);
     let jdata = Ezjsonm.(value p) in

@@ -61,10 +61,6 @@ Log.set_output stdout;
 let open Server in
 server "127.0.0.1" 7888
 
->| post "/atom.xml" (fun req params body ->
-  Log.info "%s" (new_id ());
-  log_req req; string "")
-
 (* JSON feed *)
 >| get "/feed.json" (fun req params body ->
   log_req req; 
@@ -100,6 +96,15 @@ server "127.0.0.1" 7888
       "hubs", `A [`String websub_endpoint];
     ]) ~headers)
 
+(* JSON feed *)
+>| head "/feed.json" (fun req params body ->
+  log_req req; 
+  let headers = Header.init ()
+  |> set_content_type "application/json"
+  |> add_header "Link" ("<" ^ base_url ^ "/feed.json>; rel=\"self\"")
+  |> add_header "Link" ("<" ^ websub_endpoint ^ ">; rel=\"hub\"") in
+  string "" ~headers)
+
 (* Atom feed *)
 >| get "/atom.xml" (fun req params body ->
   log_req req; 
@@ -123,12 +128,13 @@ server "127.0.0.1" 7888
     |> add_header "Link" ("<" ^ websub_endpoint ^ ">; rel=\"hub\"") in
     string out ~headers)
 
-(* HEAD index *)
->| head "/" (fun req params body ->
+>| head "/atom.xml" (fun req params body ->
   log_req req; 
   let headers = Header.init ()
-  |> add_micropub_header base_url in
-   string "" ~headers)
+  |> set_content_type "application/xml"
+  |> add_header "Link" ("<" ^ base_url ^ "/atom.xml>; rel=\"self\"")
+  |> add_header "Link" ("<" ^ websub_endpoint ^ ">; rel=\"hub\"") in
+  string "" ~headers)
 
 (* Index *)
 >| get "/" (fun req params body ->
@@ -147,9 +153,17 @@ server "127.0.0.1" 7888
     |> add_micropub_header base_url in
     string out ~headers)
 
+(* HEAD index *)
+>| head "/" (fun req params body ->
+  log_req req; 
+  let headers = Header.init ()
+  |> add_micropub_header base_url in
+   string "" ~headers)
+
 (* Micropub endpoint *)
 >| post "/webmention" (fun req params body ->
-  Webmention.process_webmention body)
+  log_req req; 
+  Webmention.process_incoming_webmention body)
 
 (* Handle Micropub queries *)
 >| get "/micropub" (fun req params body ->
@@ -168,22 +182,6 @@ server "127.0.0.1" 7888
     handle_json_create body
   else
     handle_form_create body)
- 
-(* HEAD Post/entry page *)
->| head "/<uid:string>/<slug:string>" (fun req params body ->
-  log_req req; 
-  let uid = Route.string params "uid" in
-  Entry.get uid >>= fun some_stored ->
-    match some_stored with
-    | Some _ ->
-      let headers = Header.init ()
-      |> set_content_type text_html
-      |> add_micropub_header base_url
-      |> add_webmention_header base_url in
-      string "" ~headers
-    | None ->
-      (* 404 *)
-      string "" ~status:404)
 
 (* Post/entry page *)
 >| get "/<uid:string>/<slug:string>" (fun req params body ->
@@ -221,6 +219,23 @@ server "127.0.0.1" 7888
      |> set_content_type text_html
      |> add_micropub_header base_url in
      string out ~headers ~status:404)
+ 
+(* HEAD Post/entry page *)
+>| head "/<uid:string>/<slug:string>" (fun req params body ->
+  log_req req; 
+  let uid = Route.string params "uid" in
+  Entry.get uid >>= fun some_stored ->
+    match some_stored with
+    | Some _ ->
+      let headers = Header.init ()
+      |> set_content_type text_html
+      |> add_micropub_header base_url
+      |> add_webmention_header base_url in
+      string "" ~headers
+    | None ->
+      (* 404 *)
+      string "" ~status:404)
+
 
 (* Run it *)
 |> run
