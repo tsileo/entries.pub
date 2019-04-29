@@ -16,6 +16,9 @@
         </author>
         <id>{{url}}</id>
         <summary type="html"><![CDATA[{{{content}}}]]></summary>
+        {{#category }}
+        <category term="{{ . }}" />
+        {{/category}}
     </entry>
     {{/entries}}
 </feed>

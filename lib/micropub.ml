@@ -20,8 +20,7 @@ let micropub_query req =
   Entry.get uid >>= fun some_stored ->
     match some_stored with
     | Some stored ->
-      let current_data = Ezjsonm.(from_string stored) in
-      Server.json current_data ~headers
+      Server.json stored ~headers
     | None ->
       Server.json (`O ["error", `String "url not found"]) ~status:404 ~headers
   end else
@@ -35,7 +34,7 @@ let micropub_delete url =
   match some_stored with
   | Some stored ->
     Entry.remove uid >>= fun () ->
-    Websub.ping (base_url ^ "atom.xml") >>= fun (_) ->
+    Websub.ping base_url >>= fun (_) ->
       Server.string "" ~status:204
   | None -> Server.json (`O ["error", `String "url not found"]) ~status:404
 
@@ -105,21 +104,18 @@ let micropub_update_replace current_data jdata =
 
 
 let micropub_update url jdata =
-  Log.info "URL=%s" (Uri.of_string url |> Uri.path);
   if url = "" then Server.json (invalid_request_error "missing url") ~status:400 else
   let (uid, slug) = get_uid_and_slug (url |> Uri.of_string |> Uri.path) in 
   Entry.get uid >>= fun some_stored ->
   match some_stored with
   | Some stored ->
-    let current_data = Ezjsonm.(from_string stored) in
-    let doc_with_replace = micropub_update_replace current_data jdata in
+    let doc_with_replace = micropub_update_replace stored jdata in
     let doc_with_delete = micropub_update_delete (`O doc_with_replace) jdata in
     let last_doc = micropub_update_add (`O doc_with_delete) jdata in
     let slug = slugify (jform_field (`O last_doc) ["properties"; "name"] "") in
     if slug = "" then failwith "no slug" else
-    let js = Ezjsonm.(to_string (`O last_doc)) in
-    Entry.set uid js >>= fun () ->
-    Websub.ping (base_url ^ "atom.xml") >>= fun (_) ->
+    Entry.set uid (`O last_doc) >>= fun () ->
+    Websub.ping base_url >>= fun (_) ->
       let headers = Header.init ()
       |> fun h -> Header.add h "Location" (build_url uid slug)
       in
@@ -148,7 +144,7 @@ let handle_json_create body =
       let slug = slugify entry_name in
       let uid = new_id () in
       save uid slug entry_type entry_content entry_name entry_published entry_category >>= fun () ->
-      Websub.ping (base_url ^ "atom.xml") >>= fun (_) ->
+      Websub.ping base_url >>= fun (_) ->
       let headers = Header.init ()
        |> fun h -> Header.add h "Location" (build_url uid slug) in
        Server.string "" ~status:201 ~headers
@@ -193,7 +189,7 @@ let handle_form_create body =
       let slug = slugify entry_name in
       let uid = new_id () in
       save uid slug ("h-" ^ entry_type) entry_content entry_name entry_published entry_category >>= fun () ->
-      Websub.ping (base_url ^ "atom.xml") >>= fun (_) ->
+      Websub.ping base_url >>= fun (_) ->
       let headers = Header.init ()
        |> fun h -> Header.add h "Location" (build_url uid slug) in
        Server.string "" ~status:201 ~headers

@@ -9,7 +9,7 @@ steps:
       - sudo chown -R opam .
       - git -C /home/opam/opam-repository pull origin && opam update
       - opam pin add ssl 0.5.5
-      - opam install -y dolog alcotest yurt lwt irmin-unix odate omd mustache yaml lwt_ssl lambdasoup dune
+      - opam install -y stdint dolog alcotest yurt lwt irmin-unix odate omd mustache yaml lwt_ssl lambdasoup dune
       - eval $(opam config env)
       - export CONDUIT_TLS=openssl
       # Build the entriespub binary

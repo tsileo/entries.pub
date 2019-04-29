@@ -5,16 +5,22 @@ include Cohttp.Link
 open Cohttp
 include Soup
 
+open Utils
+open Config
+
 (* Returns true if URL contains a link to target *)
 let verify_incoming_webmention url target =
-  Client.get url >>= fun (resp, body) ->
+  try%lwt Client.get url >>= fun (resp, body) ->
+    (* TODO check for 404/410 with custom exn *)
     let soup = body |> Soup.parse in
     let links =
       soup $$ "a[href]"
       |> to_list
       |> List.map (fun x -> x |> R.attribute "href")
     in
-    List.mem target links |> Lwt.return
+    (List.mem target links, Some soup) |> Lwt.return
+  with Failure _ ->
+    (false, None) |> Lwt.return
 
 let discover_webmention_html soup =
   try
@@ -43,3 +49,84 @@ let discover_webmention url =
       (* Look for the webmention endpoint in the <link> tag *)
       let soup = body |> Soup.parse in
       discover_webmention_html soup
+
+(* TODO List webmention for a given uid *)
+let iter uid =
+  ()
+
+(* Save/update a webmention *)
+let save_webmention uid mention js =
+  Store.Repo.v config >>=
+  Store.master >>= fun t ->
+  (* TODO fix the JSON dump/serialize here
+   * let js = Ezjsonm.(to_string (value (`O mention))) in *)
+  let u = Ezjsonm.(get_string (find mention ["url"])) in
+  let wid = new_id () in
+  Store.list t ["webmentions"; uid] >>= fun keys ->
+    (Lwt_list.map_s (fun (s, c) ->
+    Store.get t ["webmentions"; uid; s] >>= fun stored ->
+        if Ezjsonm.(get_string (find (from_string stored) ["url"])) = u then
+          Lwt.return (true, s) 
+        else
+          Lwt.return (false, s)
+    ) keys) >>= fun dat ->
+    (Lwt_list.filter_s (fun (ok, id) ->
+        if ok then
+          Lwt.return true
+        else
+          Lwt.return false
+    ) dat) >>= fun res ->
+      if List.length res > 0 then
+       let (_, nid) = List.hd res in
+        Store.set t ~info:(info "Updating webmention %s for entry %s" nid uid) ["webmentions"; uid; nid] js
+      else
+        Store.set t ~info:(info "Creating webmention %s for entry %s" wid uid) ["webmentions"; uid; wid] js
+
+(* Sanity check before fetching a source webmention *)
+let bad_url u =
+  let host = Yurt_util.unwrap_option_default Uri.(host (of_string u)) "" in
+  try let i = Ipaddr.(of_string_exn host) in
+    (* Reject raw IP addr *)
+    true
+  with Ipaddr.Parse_error (_, _) ->
+    let h = Uri.of_string u |> Uri.host |> fun x -> Yurt_util.unwrap_option_default x "" in
+    (* Also reject localhost and invalid URLs *)
+    if h = "localhost" || h = "" then
+      true
+    else
+      false
+
+(* Process incoming Webmentions *)
+let process_webmention body =
+  Form.urlencoded_json body >>= fun p ->
+    Log.info "[Webmention] processing payload\n%s" Ezjsonm.(to_string p);
+    let jdata = Ezjsonm.(value p) in
+    let source = jform_field jdata ["source"] "" in
+    let target = jform_field jdata ["target"] "" in
+    (* Sanity checks *)
+    if source = "" then
+      Server.json (invalid_request_error "missing source") ~status:400
+    else if target = "" then
+      Server.json (invalid_request_error "missing target") ~status:400
+    else if bad_url source then
+      Server.json (invalid_request_error "invalid source") ~status:400
+    else if Uri.(host (of_string target)) <> Uri.(host (of_string base_url)) then
+      Server.json (invalid_request_error "invalid target") ~status:400
+    else
+      let (uid, _) = get_uid_and_slug (target |> Uri.of_string |> Uri.path) in 
+      (* Verify the Webmention (by looking for the target in the source *)
+      verify_incoming_webmention source target >>= fun (ok, soup) ->
+      match soup with
+      | Some soup ->
+      if ok then
+        let mf = Microformats.parse source soup target in
+        Log.info "[Webmention] parsed mf\n%s" Ezjsonm.(to_string mf);
+        save_webmention uid mf Ezjsonm.(to_string mf) >>= fun _ ->
+          Server.string ""
+      else
+        Server.json (invalid_request_error "target not found in source") ~status:400
+      | None ->
+        Server.json (invalid_request_error "unreachable source") ~status:400
+
+(* TODO send webmention *)
+let send_webmention () = ()

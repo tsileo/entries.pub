@@ -26,6 +26,7 @@ let entry_tpl_data jdata =
   let content = jform_field jdata ["properties"; "content"] "" in
   let published = jform_field jdata ["properties"; "published"] "" in
   let uid = jform_field jdata ["properties"; "uid"] "" in
+  let tags = jform_strings jdata ["properties"; "category"] in
   let slug = slugify name in
   `O [
     "name", `String name;
@@ -37,35 +38,43 @@ let entry_tpl_data jdata =
     "author_email", `String author_email;
     "url", `String (base_url ^ "/" ^ uid ^ "/" ^ slug);
     "uid", `String uid;
+    "category", Ezjsonm.(strings tags);
   ]
 
 let path_to_slug str =
   if str = "" then "" else
   String.sub str 1 ((String.length str) - 1)
 
-let iter () =
+let iter map =
   Store.Repo.v config >>=
   Store.master >>= fun t ->
   Store.list t ["entries"] >>= fun keys ->
     (Lwt_list.map_s (fun (s, c) ->
       Store.get t ["entries"; s] >>= fun stored ->
-        stored |> Ezjsonm.from_string |> entry_tpl_data |> Lwt.return
+        stored |> Ezjsonm.from_string |> map |> Lwt.return
     ) keys)
 
 let get uid =
   Store.Repo.v config >>=
   Store.master >>= fun t ->
-    Store.find t ["entries"; uid]
+    Store.find t ["entries"; uid] >>= fun entry ->
+    match entry with
+    | Some e ->
+      (* Render the entry *)
+      let v = e |> Ezjsonm.from_string in
+      Some v |> Lwt.return
+   | None ->
+      Lwt.return None
 
 let remove uid =
   Store.Repo.v config >>=
   Store.master >>= fun t ->
-    Store.remove t ~info:(info "Deleting entry") ["entries"; uid]
+    Store.remove t ~info:(info "Deleting entry %s" uid) ["entries"; uid]
 
-let set uid js =
+let set uid entry =
   Store.Repo.v config >>=
   Store.master >>= fun t ->
-  Store.set t ~info:(info "Updating entry") ["entries"; uid] js
+  Store.set t ~info:(info "Updating entry %s" uid) ["entries"; uid] Ezjsonm.(to_string entry)
  
 (* Save a new entry *)
 let save uid slug entry_type entry_content entry_name entry_published entry_category =
@@ -82,7 +91,6 @@ let save uid slug entry_type entry_content entry_name entry_published entry_cate
     ]
   ] in
   (* JSON serialize *)
-  let js = Ezjsonm.to_string obj in
-  Log.info "%s" js;
+  Log.info "%s" Ezjsonm.(to_string obj);
   (* Save to repo *)
-  set uid js
+  set uid obj

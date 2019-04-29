@@ -62,14 +62,48 @@ let open Server in
 server "127.0.0.1" 7888
 
 >| post "/atom.xml" (fun req params body ->
+  Log.info "%s" (new_id ());
   log_req req; string "")
 
-(* TODO JSON feed *)
+(* JSON feed *)
+>| get "/feed.json" (fun req params body ->
+  log_req req; 
+  Entry.iter (fun item -> 
+    let uid = jform_field item ["properties"; "uid"] "" in
+    let published = jform_field item ["properties"; "published"] "" in
+    let content = jform_field item ["properties"; "content"] "" in
+    let title = jform_field item ["properties"; "name"] "" in
+    let slug = title |> slugify in
+    let tags = jform_strings item ["properties"; "category"] in
+    `O [
+      "id", `String (build_url uid slug);
+      "url", `String (build_url uid slug);
+      "date_published", `String published;
+      "content_html", `String (Omd.of_string content |> Omd.to_html);
+      "title", `String title;
+      "tags", Ezjsonm.(strings tags);
+
+    ]
+  ) >>= fun items ->
+    let headers = Header.init ()
+    |> set_content_type "application/json"
+    |> add_header "Link" ("<" ^ base_url ^ "/feed.json>; rel=\"self\"")
+    |> add_header "Link" ("<" ^ websub_endpoint ^ ">; rel=\"hub\"") in
+    json (`O [
+      (* TODO author avatar *)
+      "author", `O ["name", `String author_name; "url", `String (base_url ^ "/")];
+      "version", `String "https://jsonfeed.org/version/1";
+      "title", `String blog_name;
+      "home_page_url", `String (base_url ^ "/");
+      "feed_url", `String (base_url ^ "/feed.json");
+      "items", `A items;
+      "hubs", `A [`String websub_endpoint];
+    ]) ~headers)
 
 (* Atom feed *)
 >| get "/atom.xml" (fun req params body ->
   log_req req; 
-  Entry.iter () >>= fun entries ->
+  Entry.iter entry_tpl_data >>= fun entries ->
     (* Compute the "updated" field *)
     let updated = if List.length entries > 0 then
       let last_one = List.hd entries in
@@ -85,23 +119,23 @@ server "127.0.0.1" 7888
     let out = Mustache.render atom_tpl dat in
     let headers = Header.init ()
     |> set_content_type "application/xml"
-    |> fun h -> Header.add h "Link" ("<" ^ base_url ^ "/atom.xml>; rel=\"self\"")
-    |> fun h -> Header.add h "Link" ("<" ^ websub_endpoint ^ ">; rel=\"hub\"") in
+    |> add_header "Link" ("<" ^ base_url ^ "/atom.xml>; rel=\"self\"")
+    |> add_header "Link" ("<" ^ websub_endpoint ^ ">; rel=\"hub\"") in
     string out ~headers)
 
 (* HEAD index *)
 >| head "/" (fun req params body ->
   log_req req; 
   let headers = Header.init ()
-  |> add_links base_url in
+  |> add_micropub_header base_url in
    string "" ~headers)
 
 (* Index *)
 >| get "/" (fun req params body ->
   log_req req; 
-  Entry.iter () >>= fun dat ->
+  Entry.iter entry_tpl_data >>= fun dat ->
     let dat = `O [
-      "entries", `A (List.sort compare_entry_data dat);
+      "entries", `A dat;
       "base_url", `String base_url;
       "is_index", `Bool true;
       "is_entry", `Bool false;
@@ -110,20 +144,12 @@ server "127.0.0.1" 7888
     let out = Mustache.render html_tpl dat in
     let headers = Header.init ()
     |> set_content_type text_html
-    |> add_links base_url in
+    |> add_micropub_header base_url in
     string out ~headers)
 
 (* Micropub endpoint *)
 >| post "/webmention" (fun req params body ->
-  (*
-  test_mf2 >>= fun out ->
-  json out)
-  Webmention.discover_webmention "http://google.com" >>= fun res ->
-  let v = Yurt_util.unwrap_option_default res "" in
-  string v)
-  *)
-  Entriespub.Websub.ping (base_url ^ "/atom.xml") >>= fun res ->
-  if res then string "yes" else string "no")
+  Webmention.process_webmention body)
 
 (* Handle Micropub queries *)
 >| get "/micropub" (fun req params body ->
@@ -149,9 +175,11 @@ server "127.0.0.1" 7888
   let uid = Route.string params "uid" in
   Entry.get uid >>= fun some_stored ->
     match some_stored with
-    | Some stored ->
+    | Some _ ->
       let headers = Header.init ()
-      |> add_links base_url in
+      |> set_content_type text_html
+      |> add_micropub_header base_url
+      |> add_webmention_header base_url in
       string "" ~headers
     | None ->
       (* 404 *)
@@ -160,13 +188,13 @@ server "127.0.0.1" 7888
 (* Post/entry page *)
 >| get "/<uid:string>/<slug:string>" (fun req params body ->
   log_req req; 
-  let slug = Route.string params "slug" in
+  (* TODO check slug let slug = Route.string params "slug" in *)
   let uid = Route.string params "uid" in
   Entry.get uid >>= fun some_stored ->
     match some_stored with
     | Some stored ->
       (* Render the entry *)
-      let nstored = stored |> Ezjsonm.from_string |> entry_tpl_data in
+      let nstored = stored |> entry_tpl_data in
       let dat = `O [
         "is_index", `Bool false;
         "is_entry", `Bool true;
@@ -177,7 +205,8 @@ server "127.0.0.1" 7888
       let out = Mustache.render html_tpl dat in
       let headers = Header.init ()
       |> set_content_type text_html
-      |> add_links base_url in
+      |> add_micropub_header base_url
+      |> add_webmention_header base_url in
       (string out ~headers)
    | None ->
      (* Return a 404 *)
@@ -190,7 +219,7 @@ server "127.0.0.1" 7888
      let out = Mustache.render html_tpl dat in
      let headers = Header.init ()
      |> set_content_type text_html
-     |> add_links base_url in
+     |> add_micropub_header base_url in
      string out ~headers ~status:404)
 
 (* Run it *)

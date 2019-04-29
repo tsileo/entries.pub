@@ -1,11 +1,15 @@
 open Yurt
+open Stdint
 
-(* Generate a random ID (hex-encoded) *)
+(* Generate a new ID (hex-encoded), like a MongoDB ObjectID, the 4 first bytes contains the timestamp *)
 let new_id () =
   let fd = Unix.openfile "/dev/urandom" [Unix.O_RDONLY] 0o400 in
   let len = 8 in
   let buff = Bytes.create len in
-  Unix.read fd buff 0 len;
+  (* Unix timestamp encoded in big-endian to let us sort the entries from most recent for free *)
+  Uint32.(to_bytes_big_endian (of_float (Unix.time ())) buff 0);
+  (* Append 4 random bytes *)
+  Unix.read fd buff 4 4;
   Unix.close fd;
   Hex.of_string (Bytes.unsafe_to_string buff)
   |> Hex.show
@@ -25,10 +29,18 @@ let set_content_type content_type h =
   |> fun h -> Header.add h "Content-Type" content_type
   |> fun h -> Header.add h "X-Powered-By" "entries.pub"
 
-(* add the Micropub/Webmention links TODO Websub? *)
-let add_links base_url h =
+let add_header k v h =
   h
-  |> fun h -> Header.add h "Link" ("<" ^ base_url ^ "/micropub>; rel=\"micropub\",<" ^ base_url ^ "/webmention>; rel=\"webmention\"")
+  |> fun h -> Header.add h k v
+
+(* add the Micropub/Webmention links *)
+let add_micropub_header base_url h =
+  h
+  |> add_header "Link" ("<" ^ base_url ^ "/micropub>; rel=\"micropub\"")
+
+let add_webmention_header base_url h =
+  h
+  |> add_header "Link" ("<" ^ base_url ^ "/webmention>; rel=\"webmention\"")
 
 (* Micropub API error *)
 let build_error code desc = 
@@ -64,7 +76,6 @@ let jform_strings jdata k =
     Ezjsonm.(get_strings (find jdata k))
   else
     []
-
 
 (* Read the file as a string *)
 let load_file f =
