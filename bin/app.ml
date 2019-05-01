@@ -191,14 +191,19 @@ server "127.0.0.1" 7888
   Entry.get uid >>= fun some_stored ->
     match some_stored with
     | Some stored ->
+      (* Fetch associated Webmentions *)
+      Webmention.iter uid (fun x -> x) >>= fun webmentions -> 
       (* Render the entry *)
       let nstored = stored |> entry_tpl_data in
+      let has_webmentions = if List.(length webmentions) > 0 then true else false in
       let dat = `O [
         "is_index", `Bool false;
         "is_entry", `Bool true;
         "is_404", `Bool false;
         "base_url", `String base_url;
         "entry", nstored;
+        "webmentions", `A webmentions;
+        "has_webmentions", `Bool has_webmentions;
       ] in
       let out = Mustache.render html_tpl dat in
       let headers = Header.init ()

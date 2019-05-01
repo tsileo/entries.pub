@@ -63,9 +63,16 @@ let discover_webmention url =
       let soup = body |> Soup.parse in
       discover_webmention_html soup
 
-(* TODO List webmention for a given uid *)
-let iter uid =
-  ()
+(* List webmention for a given uid *)
+let iter uid map =
+  Store.Repo.v config >>=
+  Store.master >>= fun t ->
+  Store.list t ["webmentions"; uid] >>= fun keys ->
+    (Lwt_list.map_s (fun (s, c) ->
+      Store.get t ["webmentions"; uid; s] >>= fun stored ->
+        stored |> Ezjsonm.from_string |> map |> Lwt.return
+    ) keys)
+
 
 (* Save/update a webmention *)
 let save_webmention uid mention js =
