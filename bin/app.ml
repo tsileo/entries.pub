@@ -3,11 +3,11 @@ open Lwt
 open Yurt
 open Printf
 include Cohttp_lwt_unix.Server
+include Cohttp
 
 open Entriespub
 open Entriespub.Entry
 open Entriespub.Micropub
-open Entriespub.Microformats
 open Entriespub.Utils
 open Entriespub.Config
 

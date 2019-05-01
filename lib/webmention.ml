@@ -8,6 +8,19 @@ include Soup
 open Utils
 open Config
 
+(* Build a webmention "object" from the given URL *)
+let parse url soup =
+  let title = try
+    soup $ "title" |> (fun node ->
+      node |> R.leaf_text |> String.trim
+    )
+  with _ -> url in
+  `O [
+    "url", `String url;
+    "title", `String title;
+    "last_updated", `String (Date.now () |> Date.to_string);
+  ]
+
 (* Returns true if URL contains a link to target *)
 let verify_incoming_webmention url target =
   try%lwt Client.get url >>= fun (resp, body) ->
@@ -84,15 +97,19 @@ let save_webmention uid mention js =
 
 (* Sanity check before fetching a source webmention *)
 let bad_url u =
-  let host = Yurt_util.unwrap_option_default Uri.(host (of_string u)) "" in
+  let uri = Uri.(of_string u) in
+  let scheme = Yurt_util.unwrap_option_default Uri.(scheme uri) "" in
+  (* Only accept http/https URL *)
+  if scheme = "" || not (scheme = "http" || scheme = "https") then
+    true
+  else
+  let host = Yurt_util.unwrap_option_default Uri.(host uri) "" in
   try let i = Ipaddr.(of_string_exn host) in
     (* Reject raw IP addr *)
     true
   with Ipaddr.Parse_error (_, _) ->
-    let h = Uri.of_string u |> Uri.host |> fun x -> Yurt_util.unwrap_option_default x "" in
-    (* TODO check scheme *)
     (* Also reject localhost and invalid URLs *)
-    if h = "localhost" || h = "" then
+    if host = "localhost" || host = "" then
       true
     else
       false
@@ -119,13 +136,13 @@ let process_incoming_webmention body =
       verify_incoming_webmention source target >>= fun (ok, soup) ->
       match soup with
       | Some soup ->
-      if ok then
-        let mf = Microformats.parse source soup target in
-        Log.info "[Webmention] parsed mf\n%s" Ezjsonm.(to_string mf);
-        save_webmention uid mf Ezjsonm.(to_string mf) >>= fun _ ->
-          Server.string ""
-      else
-        Server.json (invalid_request_error "target not found in source") ~status:400
+        if ok then
+          let dat = parse source soup in
+          Log.info "[Webmention] parsed mf\n%s" Ezjsonm.(to_string dat);
+          save_webmention uid dat Ezjsonm.(to_string dat) >>= fun _ ->
+            Server.string ""
+        else
+          Server.json (invalid_request_error "target not found in source") ~status:400
       | None ->
         Server.json (invalid_request_error "unreachable source") ~status:400
 
