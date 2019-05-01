@@ -33,8 +33,10 @@ let micropub_delete url =
   Entry.get uid >>= fun some_stored ->
   match some_stored with
   | Some stored ->
+    let content = jform_field stored ["properties"; "content"] "" in
     Entry.remove uid >>= fun () ->
-    Websub.ping base_url >>= fun (_) ->
+    (* Entry is deleted at this point *)
+    Entry.update_hook (build_url uid slug) content >>= fun (_) ->
       Server.string "" ~status:204
   | None -> Server.json (`O ["error", `String "url not found"]) ~status:404
 
@@ -115,7 +117,7 @@ let micropub_update url jdata =
     let slug = slugify (jform_field (`O last_doc) ["properties"; "name"] "") in
     if slug = "" then failwith "no slug" else
     Entry.set uid (`O last_doc) >>= fun () ->
-    Websub.ping base_url >>= fun (_) ->
+        Entry.update_hook (build_url uid slug) (jform_field (`O last_doc) ["properties"; "content"] "") >>= fun (_) ->
       let headers = Header.init ()
       |> fun h -> Header.add h "Location" (build_url uid slug)
       in
@@ -144,7 +146,7 @@ let handle_json_create body =
       let slug = slugify entry_name in
       let uid = new_id () in
       save uid slug entry_type entry_content entry_name entry_published entry_category >>= fun () ->
-      Websub.ping base_url >>= fun (_) ->
+      Entry.update_hook (build_url uid slug) entry_content >>= fun (_) ->
       let headers = Header.init ()
        |> fun h -> Header.add h "Location" (build_url uid slug) in
        Server.string "" ~status:201 ~headers
@@ -189,7 +191,7 @@ let handle_form_create body =
       let slug = slugify entry_name in
       let uid = new_id () in
       save uid slug ("h-" ^ entry_type) entry_content entry_name entry_published entry_category >>= fun () ->
-      Websub.ping base_url >>= fun (_) ->
+      Entry.update_hook (build_url uid slug) entry_content >>= fun (_) ->
       let headers = Header.init ()
        |> fun h -> Header.add h "Location" (build_url uid slug) in
        Server.string "" ~status:201 ~headers

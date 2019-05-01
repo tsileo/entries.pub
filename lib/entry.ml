@@ -14,12 +14,6 @@ let slugify k =
   |> String.lowercase_ascii
   |> Str.global_replace (Str.regexp "[^a-z0-9\\-]") ""
 
-(* Helper for sorting entrie by date *)
-let compare_entry_data a b =
-  let a_published = jdata_field a ["published"] "" in
-  let b_published = jdata_field b ["published"] "" in
-  (String.compare b_published a_published)
-
 (* Convert a JSON entry into template data *)
 let entry_tpl_data jdata =
   let name = jform_field jdata ["properties"; "name"] "" in
@@ -28,6 +22,7 @@ let entry_tpl_data jdata =
   let uid = jform_field jdata ["properties"; "uid"] "" in
   let tags = jform_strings jdata ["properties"; "category"] in
   let slug = slugify name in
+  let has_category = if List.length tags > 0 then true else false in
   `O [
     "name", `String name;
     "slug", `String slug;
@@ -39,21 +34,21 @@ let entry_tpl_data jdata =
     "url", `String (base_url ^ "/" ^ uid ^ "/" ^ slug);
     "uid", `String uid;
     "category", Ezjsonm.(strings tags);
+    "has_category", `Bool has_category;
   ]
 
-let path_to_slug str =
-  if str = "" then "" else
-  String.sub str 1 ((String.length str) - 1)
-
+(* Iter over all the entries as JSON objects *)
 let iter map =
   Store.Repo.v config >>=
   Store.master >>= fun t ->
   Store.list t ["entries"] >>= fun keys ->
-    (Lwt_list.map_s (fun (s, c) ->
+    (* Rev map for getting more recents post first *)
+    (Lwt_list.rev_map_s (fun (s, c) ->
       Store.get t ["entries"; s] >>= fun stored ->
         stored |> Ezjsonm.from_string |> map |> Lwt.return
     ) keys)
 
+(* Get a specific entry as JSON *)
 let get uid =
   Store.Repo.v config >>=
   Store.master >>= fun t ->
@@ -66,11 +61,13 @@ let get uid =
    | None ->
       Lwt.return None
 
+(* Remove the given entry *)
 let remove uid =
   Store.Repo.v config >>=
   Store.master >>= fun t ->
     Store.remove t ~info:(info "Deleting entry %s" uid) ["entries"; uid]
 
+(* Set/update an entry *)
 let set uid entry =
   Store.Repo.v config >>=
   Store.master >>= fun t ->
@@ -94,3 +91,8 @@ let save uid slug entry_type entry_content entry_name entry_published entry_cate
   Log.info "%s" Ezjsonm.(to_string obj);
   (* Save to repo *)
   set uid obj
+
+let update_hook url body =
+  Websub.ping Config.base_url >>= fun _ ->
+    let hbody = Omd.of_string body |> Omd.to_html in
+    Webmention.send_webmentions url hbody >>= fun _ -> Lwt.return true

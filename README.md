@@ -13,6 +13,7 @@ WIP IndieWeb blog engine
  - Micropub support
  - WebSub
    - for the Atom feed
+   - and the JSON feed
  - Webmention support
  - Syndicate to ActivityPub via [microblog.pub](https://github.com/tsileo/microblog.pub)
 

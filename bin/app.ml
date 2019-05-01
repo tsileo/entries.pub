@@ -61,6 +61,8 @@ Log.set_output stdout;
 let open Server in
 server "127.0.0.1" 7888
 
+>| folder "./static" "static"
+
 (* JSON feed *)
 >| get "/feed.json" (fun req params body ->
   log_req req; 
@@ -175,9 +177,9 @@ server "127.0.0.1" 7888
 (* Micropub endpoint *)
 >| post "/micropub" (fun req params body ->
   log_req req; 
-  check_auth req >>= fun auth ->
+  (* check_auth req >>= fun auth ->
   if auth = false then json_error "unauthorized" "bad token" 401 else
-  let content_type = Yurt_util.unwrap_option_default (Header.get req.Request.headers "Content-Type") "" in
+  *) let content_type = Yurt_util.unwrap_option_default (Header.get req.Request.headers "Content-Type") "" in
   if content_type = "application/json" then
     handle_json_create body
   else

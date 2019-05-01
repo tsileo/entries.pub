@@ -1,13 +1,19 @@
 open Yurt
 open Stdint
 
+let encode_uint32 buf v =
+  for i = 0 to 3 do
+    let b = Uint32.logand Uint32.(of_int 255) (Uint32.shift_right v (24 - (i*8))) in
+    Bytes.set buf i (Char.chr (Uint32.to_int b))
+  done;;
+
 (* Generate a new ID (hex-encoded), like a MongoDB ObjectID, the 4 first bytes contains the timestamp *)
 let new_id () =
   let fd = Unix.openfile "/dev/urandom" [Unix.O_RDONLY] 0o400 in
   let len = 8 in
   let buff = Bytes.create len in
   (* Unix timestamp encoded in big-endian to let us sort the entries from most recent for free *)
-  Uint32.(to_bytes_big_endian (of_float (Unix.time ())) buff 0);
+  encode_uint32 buff Uint32.(of_float (Unix.time ()));
   (* Append 4 random bytes *)
   Unix.read fd buff 4 4;
   Unix.close fd;
