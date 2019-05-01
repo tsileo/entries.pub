@@ -21,11 +21,16 @@ let parse url soup =
     "last_updated", `String (Date.now () |> Date.to_string);
   ]
 
+let link_uniq xs x = if List.mem x xs then xs else x :: xs
+let dedup_links xs =
+  List.fold_left link_uniq [] xs
+
 (* Extract links from the HTML *)
 let extract_links soup =
   soup $$ "a[href]"
     |> to_list
     |> List.map (R.attribute "href")
+    |> dedup_links
 
 (* Returns true if URL contains a link to target *)
 let verify_incoming_webmention url target =

@@ -111,13 +111,16 @@ let micropub_update url jdata =
   Entry.get uid >>= fun some_stored ->
   match some_stored with
   | Some stored ->
+    let prev_content = jform_field stored ["properties"; "content"] "" in
     let doc_with_replace = micropub_update_replace stored jdata in
     let doc_with_delete = micropub_update_delete (`O doc_with_replace) jdata in
     let last_doc = micropub_update_add (`O doc_with_delete) jdata in
     let slug = slugify (jform_field (`O last_doc) ["properties"; "name"] "") in
+    let old_and_new_content = prev_content ^ "\n" ^ (jform_field (`O last_doc) ["properties"; "content"] "") in
     if slug = "" then failwith "no slug" else
     Entry.set uid (`O last_doc) >>= fun () ->
-        Entry.update_hook (build_url uid slug) (jform_field (`O last_doc) ["properties"; "content"] "") >>= fun (_) ->
+        (* Send both the old and new content for Webmention notification *)
+        Entry.update_hook (build_url uid slug) old_and_new_content >>= fun (_) ->
       let headers = Header.init ()
       |> fun h -> Header.add h "Location" (build_url uid slug)
       in
