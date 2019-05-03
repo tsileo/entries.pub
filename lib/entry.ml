@@ -19,16 +19,20 @@ let entry_tpl_data jdata =
   let name = jform_field jdata ["properties"; "name"] "" in
   let content = jform_field jdata ["properties"; "content"] "" in
   let published = jform_field jdata ["properties"; "published"] "" in
+  let updated = jform_field jdata ["properties"; "updated"] published in
   let uid = jform_field jdata ["properties"; "uid"] "" in
   let tags = jform_strings jdata ["properties"; "category"] in
   let slug = jform_field jdata ["properties"; "mp-slug"] (slugify name) in
   let has_category = if List.length tags > 0 then true else false in
+  let is_page = if List.mem "page" tags then true else false in
   `O [
     "name", `String name;
     "slug", `String slug;
     "content", `String (Omd.of_string content |> Omd.to_html);
     "published", `String published;
     "published_pretty", `String (Date.of_string published |> Date.to_pretty);
+    "updated", `String updated;
+    "updated_pretty", `String (Date.of_string updated |> Date.to_pretty);
     "author_name", `String author_name;
     "author_email", `String author_email;
     "author_url", `String base_url;
@@ -36,6 +40,7 @@ let entry_tpl_data jdata =
     "uid", `String uid;
     "category", Ezjsonm.(strings tags);
     "has_category", `Bool has_category;
+    "is_page", `Bool is_page;
   ]
 
 (* Iter over all the entries as JSON objects *)
@@ -83,6 +88,7 @@ let save uid slug entry_type entry_content entry_name entry_published entry_cate
       "content", `A [ `String entry_content ];
       "name", `A [ `String entry_name ];
       "published", `A [ `String entry_published ];
+      "updated", `A [ `String entry_published ];
       "uid", `A [ `String uid ];
       "url", `A [ `String (build_url uid slug) ];
       "category", Ezjsonm.(strings entry_category);
