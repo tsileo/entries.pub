@@ -21,7 +21,7 @@ let entry_tpl_data jdata =
   let published = jform_field jdata ["properties"; "published"] "" in
   let uid = jform_field jdata ["properties"; "uid"] "" in
   let tags = jform_strings jdata ["properties"; "category"] in
-  let slug = slugify name in
+  let slug = jform_field jdata ["properties"; "mp-slug"] (slugify name) in
   let has_category = if List.length tags > 0 then true else false in
   `O [
     "name", `String name;
@@ -31,6 +31,7 @@ let entry_tpl_data jdata =
     "published_pretty", `String (Date.of_string published |> Date.to_pretty);
     "author_name", `String author_name;
     "author_email", `String author_email;
+    "author_url", `String base_url;
     "url", `String (base_url ^ "/" ^ uid ^ "/" ^ slug);
     "uid", `String uid;
     "category", Ezjsonm.(strings tags);
@@ -85,6 +86,7 @@ let save uid slug entry_type entry_content entry_name entry_published entry_cate
       "uid", `A [ `String uid ];
       "url", `A [ `String (build_url uid slug) ];
       "category", Ezjsonm.(strings entry_category);
+      "mp-slug", `A [ `String slug ];
     ]
   ] in
   (* JSON serialize *)

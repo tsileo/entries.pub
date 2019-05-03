@@ -11,8 +11,8 @@ let micropub_query req =
   |> set_content_type "application/json" in
   let q = Yurt_util.unwrap_option_default (Query.string req "q") "" in
   let url = Yurt_util.unwrap_option_default (Query.string req "url") "" in
-  if q = "config" then Server.json (`O []) ~headers else
-  (* TODO syndacate to a microblog.pub instance? *)
+  if q = "config" then Server.json (`O ["post-types", `A [`O ["type", `String "article"; "name", `String "Entry"]]]) ~headers else
+  (* TODO syndicate to a microblog.pub instance? *)
   if q = "syndicate-to" then Server.json (`O ["syndicate-to", `A []]) ~headers else
   if q = "source" then begin
   if url = "" then Server.json (invalid_request_error "missing url") ~status:400 ~headers else
@@ -115,9 +115,8 @@ let micropub_update url jdata =
     let doc_with_replace = micropub_update_replace stored jdata in
     let doc_with_delete = micropub_update_delete (`O doc_with_replace) jdata in
     let last_doc = micropub_update_add (`O doc_with_delete) jdata in
-    let slug = slugify (jform_field (`O last_doc) ["properties"; "name"] "") in
+    let slug = jform_field stored ["properties"; "mp-slug"] "" in
     let old_and_new_content = prev_content ^ "\n" ^ (jform_field (`O last_doc) ["properties"; "content"] "") in
-    if slug = "" then failwith "no slug" else
     Entry.set uid (`O last_doc) >>= fun () ->
         (* Send both the old and new content for Webmention notification *)
         Entry.update_hook (build_url uid slug) old_and_new_content >>= fun (_) ->
@@ -139,14 +138,14 @@ let handle_json_create body =
     if action = "update" then micropub_update url jdata else
     (* Continue to process the entry creation *)
     let entry_type = jform_field jdata ["type"] "" in
-    let entry_content = jform_field jdata ["properties"; "content"] "" in
     let entry_name = jform_field jdata ["properties"; "name"] "Untitled" in
+    let slug = jform_field jdata ["properties"; "mp-slug"] (slugify entry_name) in
+    let entry_content = jform_field jdata ["properties"; "content"] "" in
     let entry_category = jform_strings jdata ["properties"; "category"] in
     let entry_published = jform_field jdata ["properties"; "published"] (Date.now () |> Date.to_string) in
     if entry_type <> "h-entry" then
       Server.json (invalid_request_error "invalid type, only entry is supported") ~status:400
     else 
-      let slug = slugify entry_name in
       let uid = new_id () in
       save uid slug entry_type entry_content entry_name entry_published entry_category >>= fun () ->
       Entry.update_hook (build_url uid slug) entry_content >>= fun (_) ->
@@ -182,6 +181,7 @@ let handle_form_create body =
     let entry_content = jform_field jdata ["content"] "" in
     (* TODO better than Untitled *)
     let entry_name = jform_field jdata ["name"] "Untitled" in
+    let slug = jform_field jdata ["mp-slug"] (slugify entry_name) in
     let entry_category = parse_cat jdata in
     let entry_published = jform_field jdata ["published"] (Date.now () |> Date.to_string) in
     if entry_content = "" then
@@ -191,7 +191,6 @@ let handle_form_create body =
     else if entry_type <> "entry" then
       Server.json (invalid_request_error "invalid type, only entry is supported") ~status:400
     else
-      let slug = slugify entry_name in
       let uid = new_id () in
       save uid slug ("h-" ^ entry_type) entry_content entry_name entry_published entry_category >>= fun () ->
       Entry.update_hook (build_url uid slug) entry_content >>= fun (_) ->

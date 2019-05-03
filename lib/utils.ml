@@ -59,6 +59,13 @@ let build_error code desc =
 let invalid_request_error desc = 
   build_error "invalid_request" desc
 
+(* Output a JSON error *)
+let json_error code msg status =
+  let headers = Header.init ()
+  |> set_content_type "application/json" in
+
+  Server.json (build_error code msg) ~status ~headers
+
 (* Return the first item of the given list or a data *)
 let jdata_field jdata k default =
   if Ezjsonm.(mem jdata k) then

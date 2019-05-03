@@ -23,13 +23,6 @@ let is_form content_type =
 let head (r : string) (ep : Yurt.endpoint) (s : Server.server) =
   Server.register_route_string s "HEAD" r ep
 
-(* Output a JSON error *)
-let json_error code msg status =
-  let headers = Header.init ()
-  |> set_content_type "application/json" in
-
-  Server.json (build_error code msg) ~status ~headers
-
 (* Call the token endpoint in order to verify the token validity *)
 let check_auth req =
   (* Get the bearer token from the incoming request *)
@@ -61,6 +54,7 @@ Log.set_output stdout;
 let open Server in
 server "127.0.0.1" 7888
 
+(* Serve the static dir *)
 >| folder "./static" "static"
 
 (* JSON feed *)
@@ -144,6 +138,7 @@ server "127.0.0.1" 7888
   Entry.iter entry_tpl_data >>= fun dat ->
     let dat = `O [
       "entries", `A dat;
+      "pages", `A [];
       "base_url", `String base_url;
       "is_index", `Bool true;
       "is_entry", `Bool false;
