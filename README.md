@@ -9,6 +9,7 @@ WIP IndieWeb blog engine
  - Minimalist
    - No JavaScript
    - No admin UI (rely on Micropub)
+ - [CLI client](https://github.com/tsileo/entries)
  - Microformats aware (exports `h-feed`, `h-entry`, `h-card`, ...)
  - Micropub support
  - WebSub
