@@ -115,15 +115,23 @@ let micropub_update url jdata =
     let doc_with_replace = micropub_update_replace stored jdata in
     let doc_with_delete = micropub_update_delete (`O doc_with_replace) jdata in
     let last_doc = micropub_update_add (`O doc_with_delete) jdata in
+    (* Update the `updated` field *)
+    let props = Ezjsonm.(get_dict (find (`O last_doc) ["properties"]))
+    |> List.remove_assoc "updated"
+    |> List.append ["updated", `A [`String (Date.now () |> Date.to_string)]] in
+    let final_doc = last_doc
+    |> List.remove_assoc "properties"
+    |> List.append ["properties", `O props] in
     let slug = jform_field stored ["properties"; "mp-slug"] "" in
-    let old_and_new_content = prev_content ^ "\n" ^ (jform_field (`O last_doc) ["properties"; "content"] "") in
-    Entry.set uid (`O last_doc) >>= fun () ->
+    (* TODO ensure the field is set/jform_field variation that raise an error *)
+    let old_and_new_content = prev_content ^ "\n" ^ (jform_field (`O final_doc) ["properties"; "content"] "") in
+    Entry.set uid (`O final_doc) >>= fun () ->
         (* Send both the old and new content for Webmention notification *)
         Entry.update_hook (build_url uid slug) old_and_new_content >>= fun (_) ->
       let headers = Header.init ()
       |> fun h -> Header.add h "Location" (build_url uid slug)
       in
-      Server.json ~status:201 ~headers (`O last_doc)
+      Server.json ~status:201 ~headers (`O final_doc)
   (* TODO return server_error from util *)
   | None -> Server.json (`O ["error", `String "url not found"]) ~status:404
 

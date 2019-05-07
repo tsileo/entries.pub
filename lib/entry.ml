@@ -19,7 +19,8 @@ let entry_tpl_data jdata =
   let name = jform_field jdata ["properties"; "name"] "" in
   let content = jform_field jdata ["properties"; "content"] "" in
   let published = jform_field jdata ["properties"; "published"] "" in
-  let updated = jform_field jdata ["properties"; "updated"] published in
+  let updated = jform_field jdata ["properties"; "updated"] "" in
+  let updated_pretty = if updated = "" then "" else (Date.of_string updated |> Date.to_pretty) in
   let uid = jform_field jdata ["properties"; "uid"] "" in
   let tags = jform_strings jdata ["properties"; "category"] in
   let slug = jform_field jdata ["properties"; "mp-slug"] (slugify name) in
@@ -32,7 +33,7 @@ let entry_tpl_data jdata =
     "published", `String published;
     "published_pretty", `String (Date.of_string published |> Date.to_pretty);
     "updated", `String updated;
-    "updated_pretty", `String (Date.of_string updated |> Date.to_pretty);
+    "updated_pretty", `String updated_pretty;
     "author_name", `String author_name;
     "author_email", `String author_email;
     "author_url", `String base_url;
