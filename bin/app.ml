@@ -61,12 +61,14 @@ server "127.0.0.1" 7888
 >| get "/feed.json" (fun req params body ->
   log_req req; 
   Entry.iter (fun item -> 
+    let tags = jform_strings item ["properties"; "category"] in
+    let is_page = if List.mem "page" tags then true else false in
     let uid = jform_field item ["properties"; "uid"] "" in
     let published = jform_field item ["properties"; "published"] "" in
     let content = jform_field item ["properties"; "content"] "" in
     let title = jform_field item ["properties"; "name"] "" in
     let slug = title |> slugify in
-    let tags = jform_strings item ["properties"; "category"] in
+    if is_page then `O ["is_page", `Bool true;] else
     `O [
       "id", `String (build_url uid slug);
       "url", `String (build_url uid slug);
@@ -76,7 +78,7 @@ server "127.0.0.1" 7888
       "tags", Ezjsonm.(strings tags);
 
     ]
-  ) >>= fun items ->
+  ) >>= Entry.discard_pages >>= fun items ->
     let headers = Header.init ()
     |> set_content_type "application/json"
     |> add_header "Link" ("<" ^ base_url ^ "/feed.json>; rel=\"self\"")
@@ -104,7 +106,7 @@ server "127.0.0.1" 7888
 (* Atom feed *)
 >| get "/atom.xml" (fun req params body ->
   log_req req; 
-  Entry.iter entry_tpl_data >>= fun entries ->
+  Entry.iter entry_tpl_data >>= Entry.discard_pages >>= fun entries ->
     (* Compute the "updated" field *)
     let updated = if List.length entries > 0 then
       let last_one = List.hd entries in

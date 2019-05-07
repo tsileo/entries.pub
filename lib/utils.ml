@@ -73,6 +73,12 @@ let jdata_field jdata k default =
   else
     default
 
+let jdata_bool jdata k default =
+  if Ezjsonm.(mem jdata k) then
+    Ezjsonm.(get_bool (find jdata k))
+  else
+    default
+
 (* Return the first item of the given list or a data *)
 let jform_field jdata k default =
   if Ezjsonm.(mem jdata k) then

@@ -43,6 +43,9 @@ let entry_tpl_data jdata =
     "is_page", `Bool is_page;
   ]
 
+let discard_pages entries =
+  Lwt_list.filter_s (fun d -> not (jdata_bool d ["is_page"] false) |> Lwt.return) entries
+
 (* Iter over all the entries as JSON objects *)
 let iter map =
   Store.Repo.v config >>=
