@@ -7,8 +7,11 @@ WIP IndieWeb blog engine
 ## Features
 
  - Minimalist
-   - No JavaScript
-   - No admin UI (rely on Micropub)
+   - no JavaScript
+   - no admin UI (rely on Micropub)
+ - Data is stored in a local Git repo (using [Irmin](https://github.com/mirage/irmin))
+   - backing up data is easy
+   - every mutations is a commit
  - [CLI client](https://github.com/tsileo/entries)
  - Microformats aware (exports `h-feed`, `h-entry`, `h-card`, ...)
  - Micropub support
