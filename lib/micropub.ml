@@ -5,6 +5,10 @@ open Config
 open Entry
 open Utils
 
+(* OAuth errors *)
+exception Insufficient_scope of string
+exception Invalid_request of string
+
 (* Micropub GET handler *)
 let micropub_query req =
   let headers = Header.init ()
@@ -136,15 +140,30 @@ let micropub_update url jdata =
   | None -> Server.json (`O ["error", `String "url not found"]) ~status:404
 
 (* Micropub JSON handler *)
-let handle_json_create body =
+let handle_json_create body scopes =
   Body.to_string body >>= fun sbody ->
     let jdata = Ezjsonm.from_string sbody in
     (* Handle actions *)
     let action = jdata_field jdata ["action"] "" in
     let url = jdata_field jdata ["url"] "" in
-    if action = "delete" then micropub_delete url else
-    if action = "update" then micropub_update url jdata else
-    (* Continue to process the entry creation *)
+    if action = "delete" then
+      (* Ensure the delete scope is there *)
+      if List.mem action scopes then
+        micropub_delete url
+      else
+        raise (Insufficient_scope "missing \"delete\" scope")
+    else
+    if action = "update" then
+      (* Ensure the delete scope is there *)
+      if List.mem action scopes then
+        micropub_update url jdata
+      else
+        raise (Insufficient_scope "missing \"update\" scope")
+    else
+    (* Continue to process the entry creation, start by checking the create scope *)
+    if not (List.mem "create" scopes) then
+      raise (Insufficient_scope "missing \"create\" scope")
+    else
     let entry_type = jform_field jdata ["type"] "" in
     let entry_name = jform_field jdata ["properties"; "name"] "Untitled" in
     let slug = jform_field jdata ["properties"; "mp-slug"] (slugify entry_name) in
@@ -176,15 +195,25 @@ let parse_cat dat =
   ) [] Ezjsonm.(get_dict dat))
 
 (* Micropub form handler *)
-let handle_form_create body =
+let handle_form_create body scopes =
   Form.urlencoded_json body >>= fun p ->
     Log.info "%s" Ezjsonm.(to_string p);
     let jdata = Ezjsonm.(value p) in
     (* Handle actions *)
     let action = jform_field jdata ["action"] "" in
     let url = jform_field jdata ["url"] "" in
-    if action = "delete" then micropub_delete url else
-    (* Continue to process the entry creation *)
+    (* Is this a delete action? (update is unsupported via "form" request *)
+    if action = "delete" then
+      (* Ensure the delete scope is there *)
+      if List.mem "delete" scopes then
+        micropub_delete url
+      else
+        raise (Insufficient_scope "missing \"delete\" scope")
+    else
+    (* Continue to process the entry creation and check the create scope *)
+    if not (List.mem "create" scopes) then
+      raise (Insufficient_scope "missing \"create\" scope")
+    else
     let entry_type = jform_field jdata ["h"] "entry" in
     let entry_content = jform_field jdata ["content"] "" in
     (* TODO better than Untitled *)

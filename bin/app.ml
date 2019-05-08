@@ -28,17 +28,20 @@ let check_auth req =
   (* Get the bearer token from the incoming request *)
   let auth = Yurt_util.unwrap_option_default (Header.get req.Request.headers "Authorization") "" in
   if auth = "" then
-     Lwt.return false
+    Lwt.return (false, [])
   else
-    let headers =
-      Header.init ()
-      |> fun h -> Header.add h "Authorization" auth in
+    let headers = Header.init ()
+    |> add_header "Authorization" auth
+    |> add_header "Accept" "application/json" in
 
     (* And forward it to the token endpoint *)
     Client.get ~headers token_endpoint >>= fun (resp, body) ->
-    match resp with
-    | { Response.status = `OK } -> Lwt.return true
-    | _ -> Lwt.return false
+      (* Parse the response to extract the scopes *)
+      let js = Ezjsonm.(from_string body) in
+      let scopes =  Str.split (Str.regexp_string " ") (jdata_field js ["scope"] "") in
+      match resp with
+      | { Response.status = `OK } -> Lwt.return (true, scopes)
+      | _ -> Lwt.return (false, [])
 
 (* Log HTTP request to stdout *)
 let log_req req =
@@ -59,8 +62,8 @@ server "127.0.0.1" 7888
 
 (* JSON feed *)
 >| get "/feed.json" (fun req params body ->
-  log_req req; 
-  Entry.iter (fun item -> 
+  log_req req;
+  Entry.iter (fun item ->
     let tags = jform_strings item ["properties"; "category"] in
     let is_page = if List.mem "page" tags then true else false in
     let uid = jform_field item ["properties"; "uid"] "" in
@@ -96,7 +99,7 @@ server "127.0.0.1" 7888
 
 (* JSON feed *)
 >| head "/feed.json" (fun req params body ->
-  log_req req; 
+  log_req req;
   let headers = Header.init ()
   |> set_content_type "application/json"
   |> add_header "Link" ("<" ^ base_url ^ "/feed.json>; rel=\"self\"")
@@ -105,7 +108,7 @@ server "127.0.0.1" 7888
 
 (* Atom feed *)
 >| get "/atom.xml" (fun req params body ->
-  log_req req; 
+  log_req req;
   Entry.iter entry_tpl_data >>= Entry.discard_pages >>= fun entries ->
     (* Compute the "updated" field *)
     let updated = if List.length entries > 0 then
@@ -127,7 +130,7 @@ server "127.0.0.1" 7888
     string out ~headers)
 
 >| head "/atom.xml" (fun req params body ->
-  log_req req; 
+  log_req req;
   let headers = Header.init ()
   |> set_content_type "application/xml"
   |> add_header "Link" ("<" ^ base_url ^ "/atom.xml>; rel=\"self\"")
@@ -136,7 +139,7 @@ server "127.0.0.1" 7888
 
 (* Index *)
 >| get "/" (fun req params body ->
-  log_req req; 
+  log_req req;
   Entry.iter entry_tpl_data >>= fun dat ->
     let dat = `O [
       "entries", `A dat;
@@ -154,44 +157,45 @@ server "127.0.0.1" 7888
 
 (* HEAD index *)
 >| head "/" (fun req params body ->
-  log_req req; 
+  log_req req;
   let headers = Header.init ()
   |> add_micropub_header base_url in
    string "" ~headers)
 
 (* Micropub endpoint *)
 >| post "/webmention" (fun req params body ->
-  log_req req; 
+  log_req req;
   Webmention.process_incoming_webmention body)
 
 (* Handle Micropub queries *)
 >| get "/micropub" (fun req params body ->
-  log_req req; 
-  check_auth req >>= fun auth ->
+  log_req req;
+  check_auth req >>= fun (auth, scopes) ->
+  (* No scopes checking, we're sure to have at least one (otherwise no token would have been generated) *)
   if auth = false then json_error "unauthorized" "bad token" 401 else
  micropub_query req)
 
 (* Micropub endpoint *)
 >| post "/micropub" (fun req params body ->
-  log_req req; 
-  check_auth req >>= fun auth ->
+  log_req req;
+  check_auth req >>= fun (auth, scopes) ->
   if auth = false then json_error "unauthorized" "bad token" 401 else
   let content_type = Yurt_util.unwrap_option_default (Header.get req.Request.headers "Content-Type") "" in
-  if content_type = "application/json" then
-    handle_json_create body
-  else
-    handle_form_create body)
+  (* Choose between the JSON/FORM Micropub handler *)
+  let h = if content_type = "application/json" then handle_json_create else handle_form_create in
+  try h body scopes
+  with Insufficient_scope m -> json_error "insufficient_scope" m 401)
 
 (* Post/entry page *)
 >| get "/<uid:string>/<slug:string>" (fun req params body ->
-  log_req req; 
+  log_req req;
   (* TODO check slug let slug = Route.string params "slug" in *)
   let uid = Route.string params "uid" in
   Entry.get uid >>= fun some_stored ->
     match some_stored with
     | Some stored ->
       (* Fetch associated Webmentions *)
-      Webmention.iter uid (fun x -> x) >>= fun webmentions -> 
+      Webmention.iter uid (fun x -> x) >>= fun webmentions ->
       (* Render the entry *)
       let nstored = stored |> entry_tpl_data in
       let has_webmentions = if List.(length webmentions) > 0 then true else false in
@@ -223,10 +227,10 @@ server "127.0.0.1" 7888
      |> set_content_type text_html
      |> add_micropub_header base_url in
      string out ~headers ~status:404)
- 
+
 (* HEAD Post/entry page *)
 >| head "/<uid:string>/<slug:string>" (fun req params body ->
-  log_req req; 
+  log_req req;
   let uid = Route.string params "uid" in
   Entry.get uid >>= fun some_stored ->
     match some_stored with
