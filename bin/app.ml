@@ -249,7 +249,7 @@ let post_webmention =
     `Json (build_error "invalid_request" m) |> respond' ~code:`Bad_request)
 
 let () =
-  let static = Middleware.static ~local_path:"./static" ~uri_prefix:"/static" in 
+  let static = Middleware.static ~local_path:"./static" ~uri_prefix:"/static" () in 
   let app = App.empty
   |> head_feed_json
   |> get_feed_json
