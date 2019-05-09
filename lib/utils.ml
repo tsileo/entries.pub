@@ -1,5 +1,34 @@
-open Yurt
+open Lwt.Infix
+open Opium.Std
 open Stdint
+
+let form_value dict key default =
+  try List.assoc key dict |> List.hd
+  with Not_found -> default
+
+let get_header headers k =
+  match Cohttp.Header.(get headers k) with
+  | Some v -> v
+  | _ -> ""
+
+let client_get ?headers url =
+  Cohttp_lwt_unix.Client.get ?headers Uri.(of_string url) >>= fun (resp, body) ->
+  Cohttp_lwt.Body.to_string body >|= fun body_string ->
+    (* Also return the status code as int for easy logging *)
+    let code = resp |> Cohttp.Response.status |> Cohttp.Code.code_of_status in
+    resp, code, body_string
+
+let client_post_form ?headers ~params url =
+ Cohttp_lwt_unix.Client.post_form ?headers ~params (Uri.of_string url) >>= fun (resp, body) ->
+   Cohttp_lwt.Body.to_string body >|= fun body_string ->
+     (* Also return the status code as int for easy logging *)
+     let code = resp |> Cohttp.Response.status |> Cohttp.Code.code_of_status in
+     resp, code, body_string
+
+let unwrap_option opt default =
+  match opt with
+  | Some v -> v
+  | _ -> default
 
 let encode_uint32 buf v =
   for i = 0 to 3 do
@@ -32,12 +61,12 @@ let get_uid_and_slug path =
 let text_html = "text/html; charset=utf-8"
 let set_content_type content_type h =
   h
-  |> fun h -> Header.add h "Content-Type" content_type
-  |> fun h -> Header.add h "X-Powered-By" "entries.pub"
+  |> fun h -> Cohttp.Header.add h "Content-Type" content_type
+  |> fun h -> Cohttp.Header.add h "X-Powered-By" "entries.pub"
 
 let add_header k v h =
   h
-  |> fun h -> Header.add h k v
+  |> fun h -> Cohttp.Header.add h k v
 
 (* add the Micropub/Webmention links *)
 let add_micropub_header base_url h =
@@ -58,13 +87,6 @@ let build_error code desc =
 (* Micropub API error *)
 let invalid_request_error desc = 
   build_error "invalid_request" desc
-
-(* Output a JSON error *)
-let json_error code msg status =
-  let headers = Header.init ()
-  |> set_content_type "application/json" in
-
-  Server.json (build_error code msg) ~status ~headers
 
 (* Return the first item of the given list or a data *)
 let jdata_field jdata k default =

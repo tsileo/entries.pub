@@ -1,12 +1,13 @@
 open Lwt.Infix
-open Yurt
-include Cohttp
-include Cohttp.Link
 open Cohttp
+open Cohttp.Link
 include Soup
 
 open Utils
 open Config
+open Opium.Std
+
+exception Error_invalid_request of string
 
 (* Build a webmention "object" from the given URL *)
 let parse url soup =
@@ -34,11 +35,14 @@ let extract_links soup =
 
 (* Returns true if URL contains a link to target *)
 let verify_incoming_webmention url target =
-  try%lwt Client.get url >>= fun (resp, body) ->
-    (* TODO check for 404/410 with custom exn *)
+  try%lwt client_get url >|= fun (resp, code, body) ->
+    (* Check the status code *)
+    if code > 299 then (false, None) else
+    (* Parse the HTML *)
     let soup = Soup.(parse body) in
     let links = soup |> extract_links in
-    (List.mem target links, Some soup) |> Lwt.return
+    (* Check if it contains the target *)
+    (List.mem target links, Some soup)
   with Failure _ ->
     (false, None) |> Lwt.return
 
@@ -52,17 +56,17 @@ let discover_webmention_html url soup =
   try
       let u = soup $ "link[rel=webmention]" |> R.attribute "href" |> handle_relative_url url in
       if u = "" then
-        None |> Lwt.return
+        None
       else
-        Some u |> Lwt.return
+        Some u
   with Failure _ ->
-    None |> Lwt.return
+    None
 
 let rel_webmention = Link.Rel.extension (Uri.of_string "webmention")
 
 let discover_webmention_header url resp =
   let links = 
-    Header.get_links (resp |> Response.headers)
+    Header.get_links (resp |> Cohttp.Response.headers)
     |> List.filter (fun { context; arc; target } -> List.exists (fun x -> x = rel_webmention) arc.relation)
   in
   if List.length links = 0 then None else
@@ -70,11 +74,11 @@ let discover_webmention_header url resp =
 
 (* Returns the Webmention endpoint for a given URL if any *)
 let discover_webmention url =
-  Client.get url >>= fun (resp, body) ->
+  client_get url >|= fun (resp, code, body) ->
     (* Look for the webmention endpoint in the Link headers *)
     let via_header = discover_webmention_header url resp in
     match via_header with
-    | Some _ -> Lwt.return via_header
+    | Some _ -> via_header
     | None ->
       (* Look for the webmention endpoint in the <link> tag *)
       let soup = body |> Soup.parse in
@@ -86,15 +90,9 @@ let send_webmention source target webmention_url =
   if Config.websub_endpoint = "" then Lwt.return true else
   (* Do the WebSub ping *)
   let params = ["source",[source]; "target",[target]] in
-  Client.post_form ~params webmention_url >>= fun (resp, body) ->
+  client_post_form ~params webmention_url >|= fun (resp, code, body) ->
     (* TODO log the webmention with result *)
-    let code =
-      resp
-      |> Response.status
-      |> Code.code_of_status
-    in
-    let out = if code < 300 then true else false in
-    out |> Lwt.return
+    if code < 300 then true else false
 
 (* Send webmentions to each target if a webmention endpoint is advertised *)
 let send_webmentions source body =
@@ -102,9 +100,7 @@ let send_webmentions source body =
   Lwt_list.map_s (fun target ->
     discover_webmention target >>= fun wu ->
     match wu with
-    | Some webmention_url ->
-      send_webmention source target webmention_url >>= fun res ->
-        Lwt.return res
+    | Some webmention_url -> send_webmention source target webmention_url
     | None -> Lwt.return false
   ) targets
 
@@ -114,8 +110,8 @@ let iter uid map =
   Store.master >>= fun t ->
   Store.list t ["webmentions"; uid] >>= fun keys ->
     (Lwt_list.map_s (fun (s, c) ->
-      Store.get t ["webmentions"; uid; s] >>= fun stored ->
-        stored |> Ezjsonm.from_string |> map |> Lwt.return
+      Store.get t ["webmentions"; uid; s] >|= fun stored ->
+        stored |> Ezjsonm.from_string |> map
     ) keys)
 
 (* Save/update a webmention *)
@@ -128,11 +124,11 @@ let save_webmention uid mention js =
   let wid = new_id () in
   Store.list t ["webmentions"; uid] >>= fun keys ->
     (Lwt_list.map_s (fun (s, c) ->
-    Store.get t ["webmentions"; uid; s] >>= fun stored ->
+    Store.get t ["webmentions"; uid; s] >|= fun stored ->
         if Ezjsonm.(get_string (find (from_string stored) ["url"])) = u then
-          Lwt.return (true, s) 
+          (true, s)
         else
-          Lwt.return (false, s)
+          (false, s)
     ) keys) >>= fun dat ->
     (Lwt_list.filter_s (fun (ok, id) ->
         if ok then
@@ -149,13 +145,13 @@ let save_webmention uid mention js =
 (* Sanity check before fetching a source webmention *)
 let bad_url u =
   let uri = Uri.(of_string u) in
-  let scheme = Yurt_util.unwrap_option_default Uri.(scheme uri) "" in
+  let scheme = unwrap_option Uri.(scheme uri) "" in
   (* Only accept http/https URL *)
   if scheme = "" || not (scheme = "http" || scheme = "https") then
     true
   else
-  let host = Yurt_util.unwrap_option_default Uri.(host uri) "" in
-  try let i = Ipaddr.(of_string_exn host) in
+  let host = unwrap_option Uri.(host uri) "" in
+  try let _ = Ipaddr.(of_string_exn host) in
     (* Reject raw IP addr *)
     true
   with Ipaddr.Parse_error (_, _) ->
@@ -166,21 +162,18 @@ let bad_url u =
       false
 
 (* Process incoming Webmentions *)
-let process_incoming_webmention body =
-  Form.urlencoded_json body >>= fun p ->
-    Log.info "[Webmention] processing payload\n%s" Ezjsonm.(to_string p);
-    let jdata = Ezjsonm.(value p) in
-    let source = jform_field jdata ["source"] "" in
-    let target = jform_field jdata ["target"] "" in
+let process_incoming_webmention dat =
+    let source = form_value dat "source" "" in
+    let target = form_value dat "target" "" in
     (* Sanity checks *)
     if source = "" then
-      Server.json (invalid_request_error "missing source") ~status:400
+      raise (Error_invalid_request "missing source")
     else if target = "" then
-      Server.json (invalid_request_error "missing target") ~status:400
+      raise (Error_invalid_request "missing target")
     else if bad_url source then
-      Server.json (invalid_request_error "invalid source") ~status:400
+      raise (Error_invalid_request "invalid source")
     else if Uri.(host (of_string target)) <> Uri.(host (of_string base_url)) then
-      Server.json (invalid_request_error "invalid target") ~status:400
+      raise (Error_invalid_request "invalid target")
     else
       let (uid, _) = get_uid_and_slug (target |> Uri.of_string |> Uri.path) in 
       (* Verify the Webmention (by looking for the target in the source *)
@@ -191,8 +184,8 @@ let process_incoming_webmention body =
           let dat = parse source soup in
           Log.info "[Webmention] parsed mf\n%s" Ezjsonm.(to_string dat);
           save_webmention uid dat Ezjsonm.(to_string dat) >>= fun _ ->
-            Server.string ""
+            `String "" |> respond'
         else
-          Server.json (invalid_request_error "target not found in source") ~status:400
+          raise (Error_invalid_request "target not found in source")
       | None ->
-        Server.json (invalid_request_error "unreachable source") ~status:400
+        raise (Error_invalid_request "unreachable source")

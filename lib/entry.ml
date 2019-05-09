@@ -1,7 +1,5 @@
 open Lwt.Infix
 open Lwt
-open Yurt
-open Util
 include Cohttp_lwt_unix.Server
 
 open Config

@@ -1,6 +1,5 @@
 open Lwt.Infix
 open Lwt
-open Yurt
 open Utils
 
 module Store = Irmin_unix.Git.FS.KV(Irmin.Contents.String)
@@ -12,12 +11,6 @@ let html_tpl =
 let atom_tpl =
   load_file "atom.xml"
   |> Mustache.of_string
-
-(* TODO uses Ezjsonm.find instead *)
-let find l key =
-  match l with
-  | `O list -> List.assoc key list
-  | _ -> assert false
 
 let rconf = match (load_file "config.yaml" |> Yaml.of_string) with
   | Ok r -> r

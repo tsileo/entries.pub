@@ -1,7 +1,8 @@
 open Lwt.Infix
-open Yurt
 open Cohttp
 open Soup
+
+open Utils
 
 (* Notify the WebSub hub that a resource has been updated *)
 let ping base_url =
@@ -9,12 +10,6 @@ let ping base_url =
   if Config.websub_endpoint = "" then Lwt.return true else
   (* Do the WebSub ping *)
       let params = ["hub.mode",["publish"]; "hub.url",[base_url ^ "/atom.xml"]; "hub.url",[base_url ^ "/feed.json"]] in
-  Client.post_form ~params Config.websub_endpoint >>= fun (resp, body) ->
+  client_post_form ~params Config.websub_endpoint >|= fun (resp, code, body) ->
     (* TODO log the ping with result *)
-    let code =
-      resp 
-      |> Response.status 
-      |> Code.code_of_status
-    in
-    let out = if code = 204 then true else false in
-    out |> Lwt.return
+    if code = 204 then true else false
