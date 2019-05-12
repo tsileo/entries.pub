@@ -68,7 +68,7 @@ let get_feed_json =
       "tags", Ezjsonm.(strings tags);
 
     ]
-  ) >>= Entriespub.Entry.discard_pages >>= fun items -> 
+  ) >>= Entriespub.Entry.discard_pages_and_drafts >>= fun items -> 
   let headers = Cohttp.Header.init ()
     |> add_header "Link" ("<" ^ base_url ^ "/feed.json>; rel=\"self\"")
     |> add_header "Link" ("<" ^ websub_endpoint ^ ">; rel=\"hub\"") in
@@ -96,7 +96,7 @@ let head_feed_json =
 let get_feed_atom =
   App.get "/atom.xml" (fun req ->
   Entriespub.Entry.iter Entriespub.Entry.entry_tpl_data >>=
-  Entriespub.Entry.discard_pages >>= fun entries ->
+  Entriespub.Entry.discard_pages_and_drafts >>= fun entries ->
     (* Compute the "updated" field *)
     let updated = if List.length entries > 0 then
       let last_one = List.hd entries in
@@ -136,6 +136,12 @@ let get_index =
       "is_index", `Bool true;
       "is_entry", `Bool false;
       "is_404", `Bool false;
+      "token_endpoint", `String token_endpoint;
+      "authorization_endpoint", `String authorization_endpoint;
+      "blog_name", `String blog_name;
+      "author_name", `String author_name;
+      "author_icon", `String author_icon;
+      "hero", `String hero;
     ] in
     let out = Mustache.render html_tpl dat in
     let headers = Cohttp.Header.init ()
@@ -170,6 +176,12 @@ let get_entry =
         "entry", nstored;
         "webmentions", `A webmentions;
         "has_webmentions", `Bool has_webmentions;
+        "token_endpoint", `String token_endpoint;
+        "authorization_endpoint", `String authorization_endpoint;
+        "author_name", `String author_name;
+        "author_icon", `String author_icon;
+        "hero", `String hero;
+        "blog_name", `String blog_name;
       ] in
       let out = Mustache.render html_tpl dat in
       let headers = Cohttp.Header.init ()
@@ -183,6 +195,12 @@ let get_entry =
        "is_entry", `Bool false;
        "is_404", `Bool true;
        "base_url", `String base_url;
+       "token_endpoint", `String token_endpoint;
+       "authorization_endpoint", `String authorization_endpoint;
+       "author_name", `String author_name;
+       "author_icon", `String author_icon;
+       "hero", `String hero;
+       "blog_name", `String blog_name;
      ] in
      let out = Mustache.render html_tpl dat in
      let headers = Cohttp.Header.init ()

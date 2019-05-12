@@ -24,6 +24,7 @@ let entry_tpl_data jdata =
   let slug = jform_field jdata ["properties"; "mp-slug"] (slugify name) in
   let has_category = if List.length tags > 0 then true else false in
   let is_page = if List.mem "page" tags then true else false in
+  let is_draft = if List.mem "draft" tags then true else false in
   `O [
     "name", `String name;
     "slug", `String slug;
@@ -35,15 +36,19 @@ let entry_tpl_data jdata =
     "author_name", `String author_name;
     "author_email", `String author_email;
     "author_url", `String base_url;
+    "author_icon", `String author_icon;
     "url", `String (base_url ^ "/" ^ uid ^ "/" ^ slug);
     "uid", `String uid;
     "category", Ezjsonm.(strings tags);
     "has_category", `Bool has_category;
     "is_page", `Bool is_page;
+    "is_draft", `Bool is_draft;
   ]
 
-let discard_pages entries =
-  Lwt_list.filter_s (fun d -> not (jdata_bool d ["is_page"] false) |> Lwt.return) entries
+let discard_pages_and_drafts entries =
+    Lwt_list.filter_s (fun d ->
+      not ((jdata_bool d ["is_page"] false) or jdata_bool d ["is_draft"] false)
+      |> Lwt.return) entries
 
 (* Iter over all the entries as JSON objects *)
 let iter map =
