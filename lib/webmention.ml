@@ -16,10 +16,11 @@ let parse url soup =
       node |> R.leaf_text |> String.trim
     )
   with _ -> url in
+  let now = Date.now () in
   `O [
     "url", `String url;
     "title", `String title;
-    "last_updated", `String (Date.now () |> Date.to_string);
+    "last_updated", `String (now |> Date.to_string);
   ]
 
 let link_uniq xs x = if List.mem x xs then xs else x :: xs
@@ -104,6 +105,11 @@ let send_webmentions source body =
     | None -> Lwt.return false
   ) targets
 
+let add_last_updated_pretty dat =
+  let sdate = Ezjsonm.(get_string (find dat ["last_updated"])) in
+  let ndat = Ezjsonm.get_dict dat in
+  `O (ndat @ ["last_updated_pretty", `String (Date.of_string sdate |> Date.to_pretty)])
+
 (* List webmention for a given uid *)
 let iter uid map =
   Store.Repo.v config >>=
@@ -111,7 +117,7 @@ let iter uid map =
   Store.list t ["webmentions"; uid] >>= fun keys ->
     (Lwt_list.map_s (fun (s, c) ->
       Store.get t ["webmentions"; uid; s] >|= fun stored ->
-        stored |> Ezjsonm.from_string |> map
+        stored |> Ezjsonm.from_string |> add_last_updated_pretty
     ) keys)
 
 (* Save/update a webmention *)

@@ -25,6 +25,7 @@ let entry_tpl_data jdata =
   let has_category = if List.length tags > 0 then true else false in
   let is_page = if List.mem "page" tags then true else false in
   let is_draft = if List.mem "draft" tags then true else false in
+  let has_been_updated = if updated = "" then false else if updated <> published then true else false in
   `O [
     "name", `String name;
     "slug", `String slug;
@@ -43,6 +44,7 @@ let entry_tpl_data jdata =
     "has_category", `Bool has_category;
     "is_page", `Bool is_page;
     "is_draft", `Bool is_draft;
+    "has_been_updated", `Bool has_been_updated;
   ]
 
 let discard_pages_and_drafts entries =
