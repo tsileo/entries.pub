@@ -170,11 +170,13 @@ let handle_json_create jdata scopes =
     let entry_content = jform_field jdata ["properties"; "content"] "" in
     let entry_category = jform_strings jdata ["properties"; "category"] in
     let entry_published = jform_field jdata ["properties"; "published"] (Date.now () |> Date.to_string) in
+    let extra_head = jform_field jdata ["mp-extra-head"] "" in
+    let extra_body = jform_field jdata ["mp-extra-body"] "" in
     if entry_type <> "h-entry" then
       raise (Error_invalid_request "invalid type, only entry is supported")
     else 
       let uid = new_id () in
-      save uid slug entry_type entry_content entry_name entry_published entry_category >>= fun () ->
+      save uid slug entry_type entry_content entry_name entry_published entry_category extra_head extra_body >>= fun () ->
       Entry.update_hook (build_url uid slug) entry_content >>= fun (_) ->
       let headers = Cohttp.Header.init ()
        |> add_header "Location" (build_url uid slug) in
@@ -212,6 +214,8 @@ let handle_form_create dat scopes =
     (* TODO better than Untitled *)
     let entry_name = form_value dat "name" "Untitled" in
     let slug = form_value dat "mp-slug" (slugify entry_name) in
+    let extra_head = form_value dat "mp-extra-head" "" in
+    let extra_body = form_value dat "mp-extra-body" "" in
     let entry_category = parse_cat dat in
     let entry_published = form_value dat "published" (Date.now () |> Date.to_string) in
     if entry_content = "" then
@@ -222,7 +226,7 @@ let handle_form_create dat scopes =
       raise (Error_invalid_request "invalid type, only entry is supported")
     else
       let uid = new_id () in
-      save uid slug ("h-" ^ entry_type) entry_content entry_name entry_published entry_category >>= fun () ->
+      save uid slug ("h-" ^ entry_type) entry_content entry_name entry_published entry_category extra_head extra_body >>= fun () ->
       Entry.update_hook (build_url uid slug) entry_content >>= fun (_) ->
       let headers = Cohttp.Header.init ()
        |> add_header "Location" (build_url uid slug) in

@@ -4,4 +4,4 @@ app:
 
 .PHONY: bundle
 bundle:
-	tar czvf bundle.tgz app static template.html atom.xml config.yaml
+	tar czvf bundle.tgz app static template.html atom.xml

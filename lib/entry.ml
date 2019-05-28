@@ -22,6 +22,8 @@ let entry_tpl_data jdata =
   let uid = jform_field jdata ["properties"; "uid"] "" in
   let tags = jform_strings jdata ["properties"; "category"] in
   let slug = jform_field jdata ["properties"; "mp-slug"] (slugify name) in
+  let extra_head = jform_field jdata ["properties"; "mp-extra-head"] "" in
+  let extra_body = jform_field jdata ["properties"; "mp-extra-body"] "" in
   let has_category = if List.length tags > 0 then true else false in
   let is_page = if List.mem "page" tags then true else false in
   let is_draft = if List.mem "draft" tags then true else false in
@@ -42,6 +44,8 @@ let entry_tpl_data jdata =
     "uid", `String uid;
     "category", Ezjsonm.(strings tags);
     "has_category", `Bool has_category;
+    "extra_head", `String extra_head;
+    "extra_body", `String extra_body;
     "is_page", `Bool is_page;
     "is_draft", `Bool is_draft;
     "has_been_updated", `Bool has_been_updated;
@@ -89,7 +93,7 @@ let set uid entry =
   Store.set t ~info:(info "Updating entry %s" uid) ["entries"; uid] Ezjsonm.(to_string entry)
  
 (* Save a new entry *)
-let save uid slug entry_type entry_content entry_name entry_published entry_category =
+let save uid slug entry_type entry_content entry_name entry_published entry_category extra_head extra_body =
   (* Serialize the entry to JSON microformats2 format *)
   let obj = `O [
     "type", `A [ `String entry_type ];
@@ -102,6 +106,8 @@ let save uid slug entry_type entry_content entry_name entry_published entry_cate
       "url", `A [ `String (build_url uid slug) ];
       "category", Ezjsonm.(strings entry_category);
       "mp-slug", `A [ `String slug ];
+      "mp-extra-head", `A [ `String extra_head ];
+      "mp-extra-body", `A [ `String extra_body ];
     ]
   ] in
   (* JSON serialize *)
