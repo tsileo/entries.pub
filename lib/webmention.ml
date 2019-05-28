@@ -97,7 +97,9 @@ let send_webmention source target webmention_url =
 
 (* Send webmentions to each target if a webmention endpoint is advertised *)
 let send_webmentions source body =
-  let targets = extract_links Soup.(parse body) in
+  let targets = extract_links Soup.(parse body)
+   (* filter "local" links *)
+   |> List.filter (fun url -> Uri.(host (of_string url)) <> Uri.(host (of_string base_url))) in
   Lwt_list.map_s (fun target ->
     discover_webmention target >>= fun wu ->
     match wu with
