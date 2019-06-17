@@ -150,7 +150,7 @@ let get_index =
 
 (* HEAD Index *)
 let head_index =
-  App.get "/" (fun req ->
+  App.head "/" (fun req ->
   let headers = Cohttp.Header.init ()
   |> add_micropub_header base_url in
    `Html "" |> respond' ~headers)
