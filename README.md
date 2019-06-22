@@ -4,17 +4,19 @@
 
 WIP IndieWeb blog engine.
 
+You can see it running here: [https://hexa.ninja](https://hexa.ninja).
+
 ## Features
 
  - Minimalist
    - no JavaScript
    - no admin UI (rely on Micropub)
-   - entries Markdown formatted
+   - entries are Markdown formatted
  - Special "Pages" section
-   - using the special `page` category, for timeless content
+   - using the `page` category, for timeless content
  - Data is stored in a local Git repo (using [Irmin](https://github.com/mirage/irmin))
    - backing up data is easy (push to a remote)
-   - every mutation is a commit
+   - every mutation is recorded in a commit
  - Microformats aware (exports `h-feed`, `h-entry`, `h-card`, ...)
  - Atom and [JSON](https://jsonfeed.org/) feed
  - [IndieWeb](https://indieweb.org/) support
