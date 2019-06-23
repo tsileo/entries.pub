@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    {{#is_entry}}
+    {{#entry}}
+    <title>{{name}} | {{blog_name}}</title>
+    {{{extra_head}}}
+    {{/entry}}
+    {{/is_entry}}
+    {{^is_entry}}
+    <title>{{blog_name}}</title>
+    {{/is_entry}}
+
+    <link rel="micropub" href="{{base_url}}/micropub">
+    <link rel="webmention" href="{{base_url}}/webmention">
+    <link rel="alternate" href="{{base_url}}/atom.xml" type="application/atom+xml" title="{{blog_name}} Full Atom Feed" />
+    <link rel="alternate" title="{{blog_name}} JSON Feed" type="application/json" href="{{base_url}}/feed.json" />
+    <link rel="authorization_endpoint" href="{{authorization_endpoint}}">
+    <link rel="token_endpoint" href="{{token_endpoint}}">
+    <meta content="{{blog_name}}" property="og:site_name" />
+    <meta property="og:image" content="{{author_icon}}" />
+    {{#is_entry}}
+    {{#entry}}
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="{{name}}" />
+    <meta property="og:url" content="{{url}}" />
+    <meta property="article:published_time" content="{{published}}" />
+    {{/entry}}
+    {{/is_entry}}
+  
+    {{#is_index}}
+    <meta property="og:type" content="website" />
+    {{/is_index}}
+  </head>
+  <body>
+    <div>
+
+      <header class="h-card p-author">
+        <data class="p-author" value="{{author_name}}"></data>
+        <data class="p-note" value="{{author_name}}'s entries"></data>
+        <data class="u-photo" value="{{author_icon}}"></data>
+        <a href="{{base_url}}"><h1 class="p-name">
+          {{blog_name}}
+        </h1></a>
+      </header>
+
+      {{#is_index}}
+      <main>
+        <section>
+          <h2>Entries</h2>
+          <ul class="h-feed">
+            {{#entries}}
+            {{^is_page}}
+            {{^is_draft}}
+            <li class="h-entry">
+              <a href="{{url}}" class="u-url u-uid">
+                <time class="dt-published" datetime="{{published}}">{{ published_pretty }}</time> <span class="p-name">{{name}}</span>
+              </a>
+            </li>
+            {{/is_draft}}
+            {{/is_page}}
+            {{/entries}}
+          </ul>
+        </section>
+
+        <section>
+          <h2>Pages</h2>
+          <ul class="h-feed">
+            {{#entries}}
+            {{#is_page}}
+            {{^is_draft}}
+            <li class="h-entry">
+              <a href="{{url}}" class="u-url u-uid">
+                <data class="dt-published" value="{{published}}"></data>
+                <span class="p-name">{{name}}</span>
+              </a>
+            </li>
+            {{/is_draft}}
+            {{/is_page}}
+            {{/entries}}
+          </ul>
+        </section>
+      </main>
+
+      {{/is_index}}
+
+      {{#is_entry}}
+      <main>
+      {{#entry}}
+      <article class="h-entry">
+        <h1 class="p-name">{{name}}</h1>
+        <data class="h-card u-author">
+          <data class="p-name" value="{{author_name}}"></data>
+          <data class="u-photo" value="{{author_icon}}"></data>
+          <data class="u-url" value="{{author_url}}"></data>
+        </data>
+        <data class="u-url u-uid" value="{{url}}"></data>
+        <span>Created <time datetime="{{published}}" class="dt-published">{{ published_pretty }}</time></span>
+        {{#has_been_updated}}
+        <span>Last updated <time class="dt-updated" datetime="{{updated}}">{{ updated_pretty }}</time></span>
+        {{/has_been_updated}}
+
+        {{#has_category}}
+        {{#category}}
+        <data class="p-category" value="{{.}}"></data>
+        {{/category}}
+        {{/has_category}}
+
+        <div class="p-summary e-content">
+          {{{content}}}
+        </div>
+      </article>
+
+      {{#has_webmentions}}
+      <section class="webmentions">
+        <h3>Webmentions</h3>
+        <ul>
+        {{#webmentions}}
+        <li><a href="{{url}}" rel="nofollow">{{title}}</a> <time datetime="{{last_updated}}">{{last_updated_pretty}}</time></li>
+        {{/webmentions}}
+        </ul>
+      </section>
+      {{/has_webmentions}}
+
+      {{/entry}}
+      </main>
+      {{/is_entry}}
+
+      {{#is_entry}}
+      {{#entry}}
+      {{{extra_body}}}
+      {{/entry}}
+      {{/is_entry}}
+ 
+
+      {{#is_404}}
+      <p>Error 404</p>
+      {{/is_404}}
+
+    <!-- end of .container -->
+    </div>
+
+    <footer>
+      Powered by <a href="https://entries.pub">entries.pub (source code)</a>.
+    </footer>
+
+  </body>
+</html>
