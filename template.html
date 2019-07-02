@@ -15,6 +15,126 @@
     <title>{{blog_name}}</title>
     {{/is_entry}}
 
+    <style>
+code, pre {
+  color: #2aa198;
+  font-family: 'Inconsolata, monospace';
+}
+/* inconsolata-regular - latin */
+@font-face {
+  font-family: 'Inconsolata';
+  font-style: normal;
+  font-weight: 400;
+  src: local('Inconsolata Regular'), local('Inconsolata-Regular'),
+       url('/static/Inconsolata-Regular.ttf') format('ttf');
+}
+
+/* inconsolata-700 - latin */
+@font-face {
+  font-family: 'Inconsolata';
+  font-style: normal;
+  font-weight: 700;
+  src: local('Inconsolata Bold'), local('Inconsolata-Bold'),
+       url('/static/Inconsolata-Bold.ttf') format('ttf');
+}
+html, body {
+height:100%;
+}
+.white {
+  color: #ddd;
+}
+body {
+  font-size: 18px;
+  background: #002B36;
+  font-family: 'Inconsolata, monospace';
+  color: #ddd;
+  display: flex;
+  flex-direction: column;
+}
+.footer {
+  flex-shrink: 0;
+}
+.footer > div {
+  margin: 20px auto;
+  width: 90%;
+  max-width: 960px;
+}
+.hero {
+  font-size: 1.3em;
+  margin-top: 55px;
+}
+.purple {
+  color: #e14eea;
+}
+a {
+  color: #e14eea;
+}
+
+.green, a:hover {
+  color: #32cd32;
+}
+a.selected {
+  background: #e14eea;
+  border-radius: 2px;
+  color: #fefefe;
+}
+a.selected:hover {
+  background: #32cd32;
+}
+#container {
+  width:90%;
+  max-width: 960px;
+  margin: 20px auto;
+  flex: 1 0 auto;
+}
+.menu {
+  padding-left: 0;
+  list-style-type: none;
+  margin-top: 20px;
+}
+.menu a {
+  padding: 2px 5px;
+  text-decoration: none;
+}
+.menu li { margin-bottom: 10px; }
+.col {
+  display: block;
+}
+.col > div {
+  width: 100%;
+}
+.top-menu-container {
+  width: 33%;
+  padding: 10px;
+}
+.mobile-footer { display: none; }
+@media only screen and (max-width: 450px) {
+  .mobile-footer {
+    display: block;
+    margin-top: 50px;
+  }
+.hero-container { display: none; }
+.top-menu-container { display: none; }
+}
+@media only screen and (max-width: 800px) {
+.hero-container { display: none; }
+}
+#logo {
+  display: block;
+  height: 60px;
+  /* background: url('https://sos-ch-dk-2.exo.io/hexaninja/hexaninja-alpha.png') center -40px no-repeat; */
+  background: url('/static/hexaninja-alpha.png') center -40px no-repeat;
+  padding-top: 60px;
+  text-align: center;
+  margin: 40px auto;
+  text-decoration: none;
+}
+#header {
+  display: flex;
+  flex-wrap: nowrap;
+}
+    </style>
+    <link rel="stylesheet" href="/static/highlight/styles/solarized-dark.min.css">
     <link rel="micropub" href="{{base_url}}/micropub">
     <link rel="webmention" href="{{base_url}}/webmention">
     <link rel="alternate" href="{{base_url}}/atom.xml" type="application/atom+xml" title="{{blog_name}} Full Atom Feed" />
@@ -37,28 +157,41 @@
     {{/is_index}}
   </head>
   <body>
-    <div>
+    <div id="container">
 
-      <header class="h-card p-author">
+      <header id="header" class="h-card p-author">
         <data class="p-author" value="{{author_name}}"></data>
         <data class="p-note" value="{{author_name}}'s entries"></data>
         <data class="u-photo" value="{{author_icon}}"></data>
-        <a href="{{base_url}}"><h1 class="p-name">
+        <a href="{{base_url}}" id="logo"><h1 class="p-name" style="">
           {{blog_name}}
         </h1></a>
+        <div style="width:33%;padding:0 10px;" class="hero-container p-note">
+          <p class="hero">
+            {{{hero}}}
+          </p>
+        </div>
+        <div class="top-menu-container">
+          <ul class="menu">
+            <li><a href="{{base_url}}" class="{{#is_index}}selected{{/is_index}} u-url u-uid" rel="me">Home</a></li>
+            <li style="margin-top:30px;"><a href="https://thomassileo.name" rel="me"><strong>thomassileo</strong>.name</a></li>
+            <li><a href="https://github.com/tsileo" rel="me"><strong>@tsileo</strong> on GitHub</a></li>
+            <li><a href="https://a4.io" rel="me"><strong>@t@a4.io</strong> on the Fediverse</a></li>
+          </ul>
+        </div>
       </header>
 
       {{#is_index}}
-      <main>
+      <main class="col">
         <section>
           <h2>Entries</h2>
-          <ul class="h-feed">
+          <ul style="list-style-type:none;padding:0;" class="h-feed">
             {{#entries}}
             {{^is_page}}
             {{^is_draft}}
-            <li class="h-entry">
-              <a href="{{url}}" class="u-url u-uid">
-                <time class="dt-published" datetime="{{published}}">{{ published_pretty }}</time> <span class="p-name">{{name}}</span>
+            <li style="margin-bottom:10px;" class="h-entry">
+              <a href="{{url}}" style="text-decoration:none;" class="u-url u-uid">
+                <time class="dt-published" datetime="{{published}}" style="width:130px;display:inline-block;color:#999;">{{ published_pretty }}</time> <span class="p-name">{{name}}</span>
               </a>
             </li>
             {{/is_draft}}
@@ -69,12 +202,12 @@
 
         <section>
           <h2>Pages</h2>
-          <ul class="h-feed">
+          <ul style="list-style-type:none;padding:0;" class="h-feed">
             {{#entries}}
             {{#is_page}}
             {{^is_draft}}
-            <li class="h-entry">
-              <a href="{{url}}" class="u-url u-uid">
+            <li style="margin-bottom:10px;" class="h-entry">
+              <a href="{{url}}" style="text-decoration:none;" class="u-url u-uid">
                 <data class="dt-published" value="{{published}}"></data>
                 <span class="p-name">{{name}}</span>
               </a>
@@ -92,16 +225,16 @@
       <main>
       {{#entry}}
       <article class="h-entry">
-        <h1 class="p-name">{{name}}</h1>
+        <h1 class="purple p-name">{{name}}</h1>
         <data class="h-card u-author">
           <data class="p-name" value="{{author_name}}"></data>
           <data class="u-photo" value="{{author_icon}}"></data>
           <data class="u-url" value="{{author_url}}"></data>
         </data>
         <data class="u-url u-uid" value="{{url}}"></data>
-        <span>Created <time datetime="{{published}}" class="dt-published">{{ published_pretty }}</time></span>
+        <span style="color:#999">Created <time datetime="{{published}}" class="dt-published">{{ published_pretty }}</time></span>
         {{#has_been_updated}}
-        <span>Last updated <time class="dt-updated" datetime="{{updated}}">{{ updated_pretty }}</time></span>
+        <span style="color:#999;display:block;">Last updated <time class="dt-updated" datetime="{{updated}}">{{ updated_pretty }}</time></span>
         {{/has_been_updated}}
 
         {{#has_category}}
@@ -115,12 +248,23 @@
         </div>
       </article>
 
+      <aside>
+        <p style="color:#999">
+          Have a comment?
+          <ul style="color:#999">
+            <li>Ping me on the Fediverse <a href="https://a4.io" rel="me">@t@a4.io</a></li>
+            <li>Shoot me an email at <code>contact@hexa.ninja</code></li>
+            <li>Send a <a href="https://indieweb.org/Webmention">Webmention</a></li>
+          </ul>
+        <p>
+      </aside>
+
       {{#has_webmentions}}
       <section class="webmentions">
         <h3>Webmentions</h3>
         <ul>
         {{#webmentions}}
-        <li><a href="{{url}}" rel="nofollow">{{title}}</a> <time datetime="{{last_updated}}">{{last_updated_pretty}}</time></li>
+        <li><a href="{{url}}" rel="nofollow">{{title}}</a> <time datetime="{{last_updated}}" style="color:#999">{{last_updated_pretty}}</time></li>
         {{/webmentions}}
         </ul>
       </section>
@@ -138,15 +282,30 @@
  
 
       {{#is_404}}
-      <p>Error 404</p>
+      <div style="font-size:2em;text-align:center;margin-top:120px;text-transform:uppercase">Error</div>
+      <div style="font-size:5em;text-align:center;">404</div>
       {{/is_404}}
+
+      <!-- only visible on mobile -->
+      <footer class="mobile-footer">
+        <ul class="menu">
+          <li><a href="{{base_url}}" class="{{#is_index}}selected{{/is_index}} u-url u-uid">Home</a></li>
+          <li style="margin-top:30px;"><a href="https://thomassileo.name" rel="me"><strong>thomassileo</strong>.name</a></li>
+          <li><a href="https://github.com/tsileo" rel="me"><strong>@tsileo</strong> on GitHub</a></li>
+          <li><a href="https://a4.io" rel="me"><strong>@t@a4.io</strong> on the Fediverse</a></li>
+        </ul>
+      </footer>
 
     <!-- end of .container -->
     </div>
 
-    <footer>
-      Powered by <a href="https://entries.pub">entries.pub (source code)</a>.
+    <footer class="footer">
+      <div style="color:#999">
+        Powered by <a href="https://entries.pub" style="color:#999;">entries.pub (source code)</a>.
+      </div>
     </footer>
+    <script src="/static/highlight/highlight.min.js"></script>
+    <script>hljs.initHighlightingOnLoad();</script>
 
   </body>
 </html>
