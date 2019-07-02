@@ -125,7 +125,7 @@ let load_file f =
   let s = String.create n in
   really_input ic s 0 n;
   close_in ic;
-  (s)
+  (Bytes.unsafe_to_string s)
 
 (* Date helper *)
 module Date = struct
