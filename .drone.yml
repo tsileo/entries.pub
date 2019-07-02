@@ -2,14 +2,17 @@ kind: pipeline
 name: default
 steps:
   - name: test
-    image: ocaml/opam2:4.05
+    image: ocaml/opam2:4.07
     commands:
       - sudo apt update
       - sudo apt install -y libgmp-dev perl pkg-config libssl-dev m4
       - sudo chown -R opam .
       - git -C /home/opam/opam-repository pull origin && opam update
       - opam pin add ssl 0.5.5
-      - opam install -y opium lwt_ppx stdint dolog alcotest lwt irmin-unix odate omd mustache yaml lwt_ssl lambdasoup dune
+      - opam pin add ocaml 4.07.1
+      - opam pin add ocaml-base-compiler 4.07.1
+      - opam pin add odate https://github.com/hhugo/odate.git
+      - opam install --unlock-base -y opium lwt_ppx stdint dolog alcotest lwt irmin-unix odate omd mustache yaml lwt_ssl lambdasoup dune
       - eval $(opam config env)
       - export CONDUIT_TLS=openssl
       # Build the entriespub binary
