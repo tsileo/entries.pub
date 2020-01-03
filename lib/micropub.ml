@@ -51,7 +51,7 @@ let micropub_delete url =
     | Some stored ->
         let content = jform_field stored ["properties"; "content"] "" in
         Entry.remove uid
-        >>= fun () ->
+        >>= fun _ ->
         (* Entry is deleted at this point *)
         Entry.update_hook (build_url uid slug) content
         >>= fun _ -> `String "" |> respond' ~code:`No_content
@@ -166,7 +166,7 @@ let micropub_update url jdata =
           ^ jform_field (`O final_doc) ["properties"; "content"] ""
         in
         Entry.set uid (`O final_doc)
-        >>= fun () ->
+        >>= fun _ ->
         (* Send both the old and new content for Webmention notification *)
         Entry.update_hook (build_url uid slug) old_and_new_content
         >>= fun _ ->
@@ -215,7 +215,7 @@ let handle_json_create jdata scopes =
       let uid = new_id () in
       save uid slug entry_type entry_content entry_name entry_published
         entry_category extra_head extra_body
-      >>= fun () ->
+      >>= fun _ ->
       Entry.update_hook (build_url uid slug) entry_content
       >>= fun _ ->
       let headers =
@@ -265,7 +265,7 @@ let handle_form_create dat scopes =
       let uid = new_id () in
       save uid slug ("h-" ^ entry_type) entry_content entry_name
         entry_published entry_category extra_head extra_body
-      >>= fun () ->
+      >>= fun _ ->
       Entry.update_hook (build_url uid slug) entry_content
       >>= fun _ ->
       let headers =

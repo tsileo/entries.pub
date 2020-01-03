@@ -123,8 +123,6 @@ let save uid slug entry_type entry_content entry_name entry_published
             ; ("mp-extra-head", `A [`String extra_head])
             ; ("mp-extra-body", `A [`String extra_body]) ] ) ]
   in
-  (* JSON serialize *)
-  Log.info "%s" Ezjsonm.(to_string obj) ;
   (* Save to repo *)
   set uid obj
 

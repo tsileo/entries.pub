@@ -202,7 +202,6 @@ let process_incoming_webmention dat =
     | Some soup ->
         if ok then (
           let dat = parse source soup in
-          Log.info "[Webmention] parsed mf\n%s" Ezjsonm.(to_string dat) ;
           save_webmention uid dat Ezjsonm.(to_string dat)
           >>= fun _ -> `String "" |> respond' )
         else raise (Error_invalid_request "target not found in source")
