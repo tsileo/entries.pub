@@ -113,7 +113,7 @@ module Datetime = struct
   let now () = C.(now () |> to_gmt)
 
   let to_pretty = P.sprint "%b %d, %Y"
-  let to_string = P.sprint "%Y%m%dT%H%M%SZ"
+  let to_string = P.sprint "%Y-%m-%dT%TZ"
 
   let of_string = P.from_fstring "%Y-%m-%dT%TZ"
 end
