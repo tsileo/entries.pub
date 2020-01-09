@@ -12,7 +12,7 @@ steps:
       - opam pin add ocaml-base-compiler 4.07.1
       - opam pin add ssl 0.5.5
       - opam pin add calendar "https://github.com/ocaml-community/calendar.git#3.x"
-      - opam install --unlock-base -y opium lwt_ppx stdint dolog alcotest lwt irmin-unix odate omd mustache yaml lwt_ssl lambdasoup dune
+      - opam install --unlock-base -y opium lwt_ppx stdint dolog alcotest lwt irmin-unix omd mustache yaml lwt_ssl lambdasoup dune
       - eval $(opam config env)
       - export CONDUIT_TLS=openssl
       # Build the entriespub binary
