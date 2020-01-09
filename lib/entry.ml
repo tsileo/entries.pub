@@ -18,7 +18,7 @@ let entry_tpl_data jdata =
   let published = jform_field jdata ["properties"; "published"] "" in
   let updated = jform_field jdata ["properties"; "updated"] "" in
   let updated_pretty =
-    if updated = "" then "" else Date.of_string updated |> Date.to_pretty
+    if updated = "" then "" else Datetime.of_string updated |> Datetime.to_pretty
   in
   let uid = jform_field jdata ["properties"; "uid"] "" in
   let tags = jform_strings jdata ["properties"; "category"] in
@@ -38,7 +38,7 @@ let entry_tpl_data jdata =
     ; ("slug", `String slug)
     ; ("content", `String (Omd.of_string content |> Omd.to_html))
     ; ("published", `String published)
-    ; ("published_pretty", `String (Date.of_string published |> Date.to_pretty))
+    ; ("published_pretty", `String (Datetime.of_string published |> Datetime.to_pretty))
     ; ("updated", `String updated)
     ; ("updated_pretty", `String updated_pretty)
     ; ("author_name", `String author_name)

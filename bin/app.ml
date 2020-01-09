@@ -10,7 +10,7 @@ let logger =
     let headers = Request.headers req in
     let ua = get_header headers "User-Agent" in
     let referer = get_header headers "Referer" in
-    let date = Date.now () |> Date.to_string in
+    let date = Datetime.now () |> Datetime.to_string in
     handler req
     >|= fun response ->
     let rheaders = response |> Response.headers in

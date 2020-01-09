@@ -8,10 +8,10 @@ steps:
       - sudo apt install -y libgmp-dev perl pkg-config libssl-dev m4 libseccomp-dev
       - sudo chown -R opam .
       - git -C /home/opam/opam-repository pull origin && opam update
-      - opam pin add ssl 0.5.5
       - opam pin add ocaml 4.07.1
       - opam pin add ocaml-base-compiler 4.07.1
-      - opam pin add odate https://github.com/hhugo/odate.git
+      - opam pin add ssl 0.5.5
+      - opam pin add calendar "https://github.com/ocaml-community/calendar.git#3.x"
       - opam install --unlock-base -y opium lwt_ppx stdint dolog alcotest lwt irmin-unix odate omd mustache yaml lwt_ssl lambdasoup dune
       - eval $(opam config env)
       - export CONDUIT_TLS=openssl

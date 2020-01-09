@@ -2,5 +2,4 @@
  (name entriespub)
  (flags (-w -3-6-27-32-33-35-50))
  (preprocess (pps lwt_ppx))
- (libraries opium logs.fmt stdint dolog lwt.unix irmin-unix odate omd mustache yaml lwt_ssl lambdasoup))
-
+ (libraries calendar opium logs.fmt stdint dolog lwt.unix irmin-unix omd mustache yaml lwt_ssl lambdasoup))

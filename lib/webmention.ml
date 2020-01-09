@@ -14,11 +14,11 @@ let parse url soup =
     try soup $ "title" |> fun node -> node |> R.leaf_text |> String.trim
     with _ -> url
   in
-  let now = Date.now () in
+  let now = Datetime.now () in
   `O
     [ ("url", `String url)
     ; ("title", `String title)
-    ; ("last_updated", `String (now |> Date.to_string)) ]
+    ; ("last_updated", `String (now |> Datetime.to_string)) ]
 
 let link_uniq xs x = if List.mem x xs then xs else x :: xs
 
@@ -119,7 +119,7 @@ let add_last_updated_pretty dat =
   `O
     ( ndat
     @ [ ( "last_updated_pretty"
-        , `String (Date.of_string sdate |> Date.to_pretty) ) ] )
+        , `String (Datetime.of_string sdate |> Datetime.to_pretty) ) ] )
 
 (* List webmention for a given uid *)
 let iter uid map =

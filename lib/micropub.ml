@@ -152,7 +152,7 @@ let micropub_update url jdata =
           Ezjsonm.(get_dict (find (`O last_doc) ["properties"]))
           |> List.remove_assoc "updated"
           |> List.append
-               [("updated", `A [`String (Date.now () |> Date.to_string)])]
+               [("updated", `A [`String (Datetime.now () |> Datetime.to_string)])]
         in
         let final_doc =
           last_doc
@@ -205,7 +205,7 @@ let handle_json_create jdata scopes =
     let entry_published =
       jform_field jdata
         ["properties"; "published"]
-        (Date.now () |> Date.to_string)
+        (Datetime.now () |> Datetime.to_string)
     in
     let extra_head = jform_field jdata ["mp-extra-head"] "" in
     let extra_body = jform_field jdata ["mp-extra-body"] "" in
@@ -255,7 +255,7 @@ let handle_form_create dat scopes =
     let extra_body = form_value dat "mp-extra-body" "" in
     let entry_category = parse_cat dat in
     let entry_published =
-      form_value dat "published" (Date.now () |> Date.to_string)
+      form_value dat "published" (Datetime.now () |> Datetime.to_string)
     in
     if entry_content = "" then raise (Error_invalid_request "missing content")
     else if entry_name = "" then raise (Error_invalid_request "missing name")

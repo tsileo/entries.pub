@@ -106,36 +106,14 @@ let load_file f =
   really_input ic s 0 n ; close_in ic ; Bytes.unsafe_to_string s
 
 (* Date helper *)
-module Date = struct
-  module D = ODate.Unix
+module Datetime = struct
+  module C = CalendarLib.Calendar
+  module P = CalendarLib.Printer.Calendar
 
-  (* iso format *)
-  let format = "%FT%TZ"
+  let now () = C.(now () |> to_gmt)
 
-  let parseR =
-    match D.From.generate_parser format with
-    | Some p -> p
-    | None -> failwith "could not generate parser"
+  let to_pretty = P.sprint "%b %d, %Y"
+  let to_string = P.sprint "%Y%m%dT%H%M%SZ"
 
-  let printer =
-    match D.To.generate_printer format with
-    | Some p -> p
-    | None -> failwith "could not generate printer"
-
-  let pformat = "%b %d, %Y"
-
-  let pprinter =
-    match D.To.generate_printer pformat with
-    | Some p -> p
-    | None -> failwith "could not generate pprinter"
-
-  type t = D.t
-
-  let now () = D.now ()
-
-  let to_string d = D.To.string ~tz:ODate.UTC printer d
-
-  let to_pretty d = D.To.string ~tz:ODate.UTC pprinter d
-
-  let of_string s = D.From.string parseR s
+  let of_string = P.from_fstring "%Y-%m-%dT%TZ"
 end

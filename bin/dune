@@ -2,4 +2,4 @@
  (name app)
  (flags (-w -3-6-27-32-33-35-50) (-g))
  (preprocess (pps lwt_ppx))
- (libraries opium lwt.unix irmin-unix odate omd mustache yaml lwt_ssl lambdasoup entriespub))
+ (libraries opium lwt.unix irmin-unix omd mustache yaml lwt_ssl lambdasoup entriespub))

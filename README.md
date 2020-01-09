@@ -32,6 +32,8 @@ You can see it running here: [https://hexa.ninja](https://hexa.ninja).
 
 ### Development
 
+    $ opam pin add calendar "https://github.com/ocaml-community/calendar.git#3.x"
+
 ### In order to support TLS 1.3
 
     $ opam pin add ssl 0.5.5
