@@ -8,7 +8,6 @@
     {{#is_entry}}
     {{#entry}}
     <title>{{name}} | {{blog_name}}</title>
-    {{{extra_head}}}
     {{/entry}}
     {{/is_entry}}
     {{^is_entry}}
@@ -44,13 +43,30 @@ height:100%;
   color: #ddd;
 }
 body {
-  font-size: 18px;
+  font-size: 20px;
+  line-height: 32px;
   background: #002B36;
   font-family: 'Inconsolata, monospace';
   color: #ddd;
   display: flex;
   flex-direction: column;
 }
+h1 {
+    font-size: 30px;
+    line-height: 46px;
+}
+h2 {
+font-size: 24px;
+line-height: 34px;
+padding: 0;
+}
+h3 {
+font-size: 22px;
+line-height: 32px;
+padding: 0;
+}
+
+
 .footer {
   flex-shrink: 0;
 }
@@ -134,6 +150,12 @@ a.selected:hover {
   flex-wrap: nowrap;
 }
     </style>
+    {{#is_entry}}
+    {{#entry}}
+    {{{extra_head}}}
+    {{/entry}}
+    {{/is_entry}}
+ 
     <link rel="stylesheet" href="/static/highlight/styles/solarized-dark.min.css">
     <link rel="micropub" href="{{base_url}}/micropub">
     <link rel="webmention" href="{{base_url}}/webmention">
@@ -159,6 +181,7 @@ a.selected:hover {
   <body>
     <div id="container">
 
+      {{^is_host}}
       <header id="header" class="h-card p-author">
         <data class="p-author" value="{{author_name}}"></data>
         <data class="p-note" value="{{author_name}}'s entries"></data>
@@ -180,6 +203,7 @@ a.selected:hover {
           </ul>
         </div>
       </header>
+      {{/is_host}}
 
       {{#is_index}}
       <main class="col">
@@ -189,11 +213,13 @@ a.selected:hover {
             {{#entries}}
             {{^is_page}}
             {{^is_draft}}
+            {{^is_host}}
             <li style="margin-bottom:10px;" class="h-entry">
               <a href="{{url}}" style="text-decoration:none;" class="u-url u-uid">
                 <time class="dt-published" datetime="{{published}}" style="width:130px;display:inline-block;color:#999;">{{ published_pretty }}</time> <span class="p-name">{{name}}</span>
               </a>
             </li>
+            {{/is_host}}
             {{/is_draft}}
             {{/is_page}}
             {{/entries}}
@@ -217,9 +243,30 @@ a.selected:hover {
             {{/entries}}
           </ul>
         </section>
+
+        <section>
+           <h2>Projects</h2>
+            <ul style="list-style-type:none;padding:0;">
+            {{#entries}}
+            {{^is_page}}
+            {{^is_draft}}
+            {{#is_host}}
+            <li style="margin-bottom:10px;">
+                <a href="https://{{host}}" style="text-decoration:none;" >
+                {{host}} — {{name}}
+              </a>
+            </li>
+            {{/is_host}}
+            {{/is_draft}}
+            {{/is_page}}
+            {{/entries}}
+          </ul>
+ 
+        </section>
       </main>
 
       {{/is_index}}
+
 
       {{#is_entry}}
       <main>
@@ -232,6 +279,7 @@ a.selected:hover {
           <data class="u-url" value="{{author_url}}"></data>
         </data>
         <data class="u-url u-uid" value="{{url}}"></data>
+        {{^is_host}}
         <span style="color:#999">Created <time datetime="{{published}}" class="dt-published">{{ published_pretty }}</time></span>
         {{#has_been_updated}}
         <span style="color:#999;display:block;">Last updated <time class="dt-updated" datetime="{{updated}}">{{ updated_pretty }}</time></span>
@@ -242,12 +290,18 @@ a.selected:hover {
         <data class="p-category" value="{{.}}"></data>
         {{/category}}
         {{/has_category}}
+        {{/is_host}}
+        {{#is_host}}
+        <time datetime="{{published}}" class="dt-published"></time>
+        <time class="dt-updated" datetime="{{updated}}"></time>
+        {{/is_host}}
 
         <div class="p-summary e-content">
           {{{content}}}
         </div>
       </article>
 
+      {{^is_host}}
       <aside>
         <p style="color:#999">
           Have a comment?
@@ -258,6 +312,7 @@ a.selected:hover {
           </ul>
         <p>
       </aside>
+      {{/is_host}}
 
       {{#has_webmentions}}
       <section class="webmentions">
@@ -286,6 +341,7 @@ a.selected:hover {
       <div style="font-size:5em;text-align:center;">404</div>
       {{/is_404}}
 
+      {{^is_host}}
       <!-- only visible on mobile -->
       <footer class="mobile-footer">
         <ul class="menu">
@@ -298,12 +354,8 @@ a.selected:hover {
 
     <!-- end of .container -->
     </div>
+    {{/is_host}}
 
-    <footer class="footer">
-      <div style="color:#999">
-        Powered by <a href="https://entries.pub" style="color:#999;">entries.pub (source code)</a>.
-      </div>
-    </footer>
     <script src="/static/highlight/highlight.min.js"></script>
     <script>hljs.initHighlightingOnLoad();</script>
 
