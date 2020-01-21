@@ -391,9 +391,9 @@ let process_incoming_webmention dat =
               raise
                 (Webmention.Error_invalid_request "target not found in source")
         | None ->
-            raise (Webmention.Error_invalid_request "unreachable source")
-        | None ->
-            raise (Webmention.Error_invalid_request "invalid target") )
+            raise (Webmention.Error_invalid_request "unreachable source") )
+    | None ->
+        raise (Webmention.Error_invalid_request "invalid target")
 
 
 (* POST Micropub endpoint *)
