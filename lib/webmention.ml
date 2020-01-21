@@ -218,33 +218,3 @@ let bad_url u =
     | Ipaddr.Parse_error (_, _) ->
         (* Also reject localhost and invalid URLs *)
         if host = "localhost" || host = "" then true else false
-
-
-(* Process incoming Webmentions *)
-let process_incoming_webmention dat =
-  let source = form_value dat "source" "" in
-  let target = form_value dat "target" "" in
-  (* Sanity checks *)
-  if source = ""
-  then raise (Error_invalid_request "missing source")
-  else if target = ""
-  then raise (Error_invalid_request "missing target")
-  else if bad_url source
-  then raise (Error_invalid_request "invalid source")
-  else if Uri.(host (of_string target)) <> Uri.(host (of_string base_url))
-  then raise (Error_invalid_request "invalid target")
-  else
-    let uid, _ = get_uid_and_slug (target |> Uri.of_string |> Uri.path) in
-    (* Verify the Webmention (by looking for the target in the source *)
-    verify_incoming_webmention source target
-    >>= fun (ok, soup) ->
-    match soup with
-    | Some soup ->
-        if ok
-        then
-          let dat = parse source soup in
-          save_webmention uid dat Ezjsonm.(to_string dat)
-          >>= fun _ -> `String "" |> respond'
-        else raise (Error_invalid_request "target not found in source")
-    | None ->
-        raise (Error_invalid_request "unreachable source")

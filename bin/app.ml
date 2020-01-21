@@ -353,13 +353,56 @@ let post_micropub =
             `Json (build_error "not_found" m) |> respond' ~code:`Not_found)
 
 
+(* Process incoming Webmentions *)
+let process_incoming_webmention dat =
+  let source = form_value dat "source" "" in
+  let target = form_value dat "target" "" in
+  (* Sanity checks *)
+  if source = ""
+  then raise (Webmention.Error_invalid_request "missing source")
+  else if target = ""
+  then raise (Webmention.Error_invalid_request "missing target")
+  else if Webmention.bad_url source
+  then raise (Webmention.Error_invalid_request "invalid source")
+  else
+    let uri = target |> Uri.of_string in
+    let rhost = source_of_uri uri in
+    let uid, slug =
+      try get_uid_and_slug (uri |> Uri.path) with _ -> ("", "")
+    in
+    Entry.get_by_uid_or_host uid rhost
+    >>= fun some_stored ->
+    match some_stored with
+    | Some stored ->
+        let entry = stored |> Entry.EntryModel.of_json in
+        let uid = Entry.get_prop_exn entry.properties.uid in
+        let url = Entry.get_prop_exn entry.properties.url in
+        (* Verify the Webmention (by looking for the target in the source *)
+        Webmention.verify_incoming_webmention source url
+        >>= fun (ok, soup) ->
+        ( match soup with
+        | Some soup ->
+            if ok
+            then
+              let dat = Webmention.parse source soup in
+              Webmention.save_webmention uid dat Ezjsonm.(to_string dat)
+              >>= fun _ -> `String "" |> respond'
+            else
+              raise
+                (Webmention.Error_invalid_request "target not found in source")
+        | None ->
+            raise (Webmention.Error_invalid_request "unreachable source")
+        | None ->
+            raise (Webmention.Error_invalid_request "invalid target") )
+
+
 (* POST Micropub endpoint *)
 let post_webmention =
   App.post "/webmention" (fun req ->
       req
       |> App.urlencoded_pairs_of_body
       >>= fun dat ->
-      try%lwt Webmention.process_incoming_webmention dat with
+      try%lwt process_incoming_webmention dat with
       | Webmention.Error_invalid_request m ->
           `Json (build_error "invalid_request" m) |> respond' ~code:`Bad_request)
 

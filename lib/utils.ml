@@ -2,6 +2,13 @@ open Lwt.Infix
 open Opium.Std
 open Stdint
 
+let source_of_uri uri =
+  let port =
+    match uri |> Uri.port with Some p -> ":" ^ string_of_int p | None -> ""
+  in
+  match uri |> Uri.host with Some h -> h ^ port | None -> ""
+
+
 let form_value dict key default =
   try List.assoc key dict |> List.hd with Not_found -> default
 
