@@ -292,4 +292,4 @@ let update_hook url body =
   Websub.ping Config.base_url
   >>= fun _ ->
   let hbody = Omd.of_string body |> Omd.to_html in
-  Webmention.send_webmentions url hbody >>= fun _ -> Lwt.return true
+  Webmention.send_webmentions url hbody >|= fun _ -> true

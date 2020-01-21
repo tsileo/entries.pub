@@ -74,10 +74,11 @@ let micropub_delete url =
     match some_stored with
     | Some stored ->
         let content = jform_field stored [ "properties"; "content" ] "" in
+        let url = jform_field stored [ "properties"; "url" ] "" in
         Entry.remove uid
         >>= fun _ ->
         (* Entry is deleted at this point *)
-        Entry.update_hook (build_url uid slug) content
+        Entry.update_hook url content
         >>= fun _ -> `String "" |> respond' ~code:`No_content
     | None ->
         raise (Error_not_found "url not found")
